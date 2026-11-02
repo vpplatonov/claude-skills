@@ -1,0 +1,8 @@
+{
+  "name": "personal",
+  "version": "1.0.0",
+  "description": "PR review/approve, multi-repo sync, self-review loop, branch hygiene, CI test conventions, PII and ticket-naming rules, Python typing, Jira linking, torch on Apple Silicon.",
+  "author": {
+    "name": "vpplatonov"
+  }
+}

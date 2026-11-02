@@ -1,0 +1,14 @@
+{
+  "name": "vpplatonov-skills",
+  "description": "Personal Claude Code skills: PR review workflows, git hygiene, CI test conventions, and Python/Jira working rules.",
+  "owner": {
+    "name": "vpplatonov"
+  },
+  "plugins": [
+    {
+      "name": "personal",
+      "source": "./plugins/personal",
+      "description": "PR review/approve, multi-repo sync, self-review loop, branch hygiene, CI test conventions, PII and ticket-naming rules, Python typing, Jira linking, torch on Apple Silicon."
+    }
+  ]
+}
