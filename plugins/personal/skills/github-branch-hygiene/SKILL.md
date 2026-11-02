@@ -10,9 +10,12 @@ description: Pre/post commit-push verification checklist, always stating the loc
 > ask the user which branches are shared (and suggest
 > `/personal:init-personal-skills`) — never guess them.
 
-**Every command below is for the user to run, unconditionally.** `git commit`, `git add`, `git push` (including `--force`/`--force-with-lease`), `git reset --hard`, `git checkout -B` against a shared branch, `git branch`, `git checkout -b`, `gh pr create` — none of these get executed by the agent itself, no matter how routine, low-risk, or clearly-the-right-move a step looks (including every step in the "Remediation" checklist below). The agent's role is always: diagnose, explain, and hand off the exact commands (or, for a PR, the drafted title/body) — never run them. This holds even mid-incident-cleanup, when moving fast feels justified.
+**Git hand-off — default `on`.** Read `Git hand-off` from the `## repo-* skills` section of `~/.claude/CLAUDE.md`; missing or unset means `on`.
 
-## Never create a PR — `gh pr create` is always the user's
+- **`on` (default): every command below is for the user to run, unconditionally.** `git commit`, `git add`, `git push` (including `--force`/`--force-with-lease`), `git reset --hard`, `git checkout -B` against a shared branch, `git branch`, `git checkout -b`, `gh pr create`, `gh pr merge` — none of these get executed by the agent itself, no matter how routine, low-risk, or clearly-the-right-move a step looks (including every step in the "Remediation" checklist below). The agent's role is always: diagnose, explain, and hand off the exact commands (or, for a PR, the drafted title/body) — never run them. This holds even mid-incident-cleanup, when moving fast feels justified. The two sections below ("Never create a PR", "Branch creation") apply in this mode.
+- **`off`: the agent may run these commands itself** — commits, pushes, branch creation, `gh pr create` — but every check in this skill still applies: state the local and remote targets first, check the upstream before the first push, verify after, and create branches off a shared branch with `--no-track` per the rule below. Still ask for an explicit OK, per action, before anything destructive or shared: any force-push, `git reset --hard`, a direct push to `<release-branch>` or `<main-branch>`, or merging a PR.
+
+## Never create a PR — `gh pr create` is always the user's (hand-off `on`)
 
 Confirmed 2026-08-20, generalized from a session where the agent had previously opened several PRs on explicit per-instance requests ("yep - open PR") earlier in the same work: those one-off asks do not establish a standing default. **The default, always and without being asked again, is: draft the title/body, hand them off, and stop** — `gh pr create` itself is never run by the agent, the same way `git commit`/`git push` never are.
 
@@ -20,7 +23,7 @@ Confirmed 2026-08-20, generalized from a session where the agent had previously 
 
 **Exception:** a narrow, explicitly-named exception may exist for a dedicated "code review loop" workflow the user is introducing separately — that exception applies only within that specific, explicitly-invoked workflow once defined, never as a general loosening here.
 
-## Branch creation is the user's privilege, zero exceptions — confirmed twice now
+## Branch creation is the user's privilege (hand-off `on`) — confirmed twice now
 
 Confirmed 2026-08-05, right after the exact incident this skill exists to prevent happened again: the agent ran `git checkout -b feat/proj104-editable-nested-fields origin/<release-branch>` itself, which set the new branch's upstream to `origin/<release-branch>` (see "Root cause" below) — and a later plain `git push` (also run by the user, but on a footgun the agent had already set) landed a commit directly on shared `<release-branch>`. Explaining the footgun after the fact wasn't enough; the fix is to never be the one who creates the branch in the first place.
 

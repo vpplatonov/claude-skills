@@ -20,7 +20,7 @@
   Update later with `/plugin marketplace update vpplatonov-skills`.
 
 ### Set up your project
-- [ ] Run `/personal:init-personal-skills`. It asks for your GitHub org, workspace folder, release branch (default `release`), main branch (default `main`) and promotion repos, suggests what it can detect with `gh`, and writes them to the `## repo-* skills` section of `~/.claude/CLAUDE.md` after your OK. Rerun it when you switch projects.
+- [ ] Run `/personal:init-personal-skills`. It asks for your GitHub org, workspace folder, release branch (default `release`), main branch (default `main`), promotion repos and the git hand-off rule (default `on`), suggests what it can detect with `gh`, and writes them to the `## repo-* skills` section of `~/.claude/CLAUDE.md` after your OK. Rerun it when you switch projects.
 
 ### Skills to Know About
 
@@ -42,7 +42,7 @@ Built-in worth knowing:
 ## Tips
 
 - Nothing visible to others is posted without your OK — the skills draft PR comments, approvals, Jira edits and Slack messages and wait.
-- Claude hands you commit and push commands instead of running them. Check the stated local and remote branch before you run them.
+- By default Claude hands you commit and push commands instead of running them (`Git hand-off: on`). Check the stated local and remote branch before you run them. Rerun `/personal:init-personal-skills` to switch it off.
 - Always qualify a PR number with its repo (`api#54`, not `#54`) — numbers collide across repos.
 - Long-running or paid tests (LLM regression suites) never run in GitHub Actions; run them locally twice before calling a change CI-ready.
 

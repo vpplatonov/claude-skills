@@ -32,6 +32,7 @@ The skills use placeholders instead of a hard-coded org, repos or branches:
 | `<release-branch>` | `release` | Shared branch feature PRs merge into; `repo-pull` syncs to it |
 | `<main-branch>` | `main` | Production branch; the release branch is promoted into it via a PR |
 | `<promotion-repos>` | `api`, `ui` | Repos running the release → main promotion |
+| Git hand-off | `on` | `on`: Claude hands you git commands instead of running them. `off`: Claude runs them itself (see below) |
 
 Run `/personal:init-personal-skills` once per project. It detects what it
 can with `gh`, asks you to confirm each value, and writes them to the
@@ -44,6 +45,7 @@ can with `gh`, asks you to confirm each value, and writes them to the
 - Release branch: release
 - Main branch: main
 - Promotion repos: api, ui
+- Git hand-off: on
 ```
 
 Real values live only in that file, never in this repo.
@@ -92,8 +94,11 @@ Real values live only in that file, never in this repo.
 
 ## Ground rules baked into every skill
 
-- Claude never commits, pushes or merges on its own — it hands you the
-  commands.
+- **Git hand-off (default `on`):** Claude never commits, pushes or merges
+  on its own — it hands you the commands. Set `Git hand-off: off` (via
+  `/personal:init-personal-skills`) to let Claude run them itself; it
+  still states the target branches first and asks before force-pushes,
+  resets, direct pushes to the release/main branches, and merges.
 - Anything visible to others (PR comments, approvals, reviewer requests, Jira
   edits, Slack messages) is drafted first and posted only after your OK.
 

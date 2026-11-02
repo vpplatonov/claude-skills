@@ -146,8 +146,8 @@ this skill:
    "self-review" refers to. This applies to the *content* of what gets
    handed off, not to your live report to the user in this conversation,
    where round-by-round narration is exactly what they asked for.
-   - **Only if the user explicitly approves committing/pushing this
-     specific diff in this specific turn** (a real go-ahead on the actual
+   - **With `Git hand-off: on` (the default), only if the user explicitly
+     approves committing/pushing this specific diff in this specific turn** (a real go-ahead on the actual
      drafted message shown, not a standing or implied blanket permission —
      see "Committing and pushing" below): `git add` the touched files,
      `git commit` with the approved message, `git push`. Ask again next
@@ -155,6 +155,13 @@ this skill:
      not a session-wide toggle.
 
 ## Committing and pushing — gated, not blanket
+
+Everything below describes the default, `Git hand-off: on` (read from the
+`## repo-* skills` section of `~/.claude/CLAUDE.md`; missing means `on`).
+With `Git hand-off: off`, the per-command approval gate is lifted: once
+the loop is clear, commit the touched files with the drafted message and
+push to the PR's own branch, stating the local and remote targets first
+(see `github-branch-hygiene`). A force-push still needs an explicit OK.
 
 Originally this skill never committed or pushed under any circumstance,
 full stop — editing code autonomously across multiple rounds was fine

@@ -42,8 +42,9 @@ confirmation (see step 3):
 **Never** run `gh pr edit --add-reviewer` without that PR's own confirmation
 in the same run, never merge/close/reopen a PR, never push a fix commit
 without separately walking through the normal edit → show diff → user
-approves → user commits/pushes flow (this skill proposes fixes, it does not
-commit or push them — see step 4).
+approves → commit/push flow, where who runs the commit/push follows
+`Git hand-off` in `~/.claude/CLAUDE.md` (default `on`: the user). This skill
+itself only proposes fixes, it does not commit or push them — see step 4.
 
 ## Algorithm
 

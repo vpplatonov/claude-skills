@@ -1,6 +1,6 @@
 ---
 name: init-personal-skills
-description: Set up the repo-* skills for a new project — ask for (and auto-detect via gh) the GitHub org, local workspace folder, release branch, main branch and promotion repos, then write them to the `## repo-* skills` section of the user-level ~/.claude/CLAUDE.md after confirmation. Invoke when the user says "/init-personal-skills", "set up the skills for a new project", "switch the repo skills to another org", or when another skill reports placeholder config values.
+description: Set up the repo-* skills for a new project — ask for (and auto-detect via gh) the GitHub org, local workspace folder, release branch, main branch, promotion repos and the git hand-off rule (default on), then write them to the `## repo-* skills` section of the user-level ~/.claude/CLAUDE.md after confirmation. Invoke when the user says "/init-personal-skills", "set up the skills for a new project", "switch the repo skills to another org", or when another skill reports placeholder config values.
 ---
 
 # Initialize the repo-* skills for a project
@@ -22,6 +22,7 @@ whenever the user moves to a different project.
 - Release branch: <release-branch>
 - Main branch: <main-branch>
 - Promotion repos: <repo>, <repo>
+- Git hand-off: on
 ```
 
 | Key | Used by | Default suggestion |
@@ -31,6 +32,7 @@ whenever the user moves to a different project.
 | Release branch | shared integration branch feature PRs merge into; `repo-pull` syncs to it | `release` |
 | Main branch | production branch; `<release-branch>` is promoted into it via a PR | `main` |
 | Promotion repos | repos running the release → main promotion; `repo-pr-approve` lists their open PRs into the main branch | detected, see step 4 |
+| Git hand-off | `on`: Claude never commits, pushes, creates branches/PRs or merges — it hands you the commands. `off`: Claude runs them itself, still asking before force-pushes, resets, direct pushes to shared branches and merges (`github-branch-hygiene`, `repo-code-review`, `repo-pr-review`) | `on` |
 
 ## Steps
 
@@ -60,7 +62,12 @@ whenever the user moves to a different project.
    Show the matches as the suggested promotion repos and let the user add or
    remove entries. If nothing matches, ask whether the branch name is right
    before accepting an empty list.
-5. **Confirm, then write.** Show the complete section exactly as it will be
+5. **Git hand-off.** Ask whether Claude should keep handing off git
+   commands (`on`, the default — Claude never commits, pushes or merges on
+   its own) or run them itself (`off`). Explain what `off` still guards
+   (force-pushes, resets, direct pushes to the release/main branches and
+   merges each need an OK). Keep `on` unless the user clearly chooses `off`.
+6. **Confirm, then write.** Show the complete section exactly as it will be
    written and wait for the user's OK. Then:
    - file missing → create `~/.claude/CLAUDE.md` with just this section;
    - section present → replace it in place (from the `## repo-* skills`
@@ -68,7 +75,7 @@ whenever the user moves to a different project.
    - section absent → append it at the end, separated by a blank line.
    Never touch any other part of the file. Show the resulting section
    (`sed -n '/^## repo-\* skills/,/^## /p' ~/.claude/CLAUDE.md`) as proof.
-6. **Report** the values written and remind the user that a new Claude Code
+7. **Report** the values written and remind the user that a new Claude Code
    session picks them up (the current one already has the old CLAUDE.md
    loaded).
 

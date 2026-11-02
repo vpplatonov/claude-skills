@@ -32,8 +32,8 @@ without asking the user to run them instead:
 
 **Never** run `git add`, `git commit`, `git push`, `git stash pop`, `git
 stash drop`, or `git reset --hard` as part of this skill — those stay
-strictly off-limits (see `commit-message-style` and the standing git-flow
-memory: the user runs commit/push themselves, always). This whitelist is
+strictly off-limits — this skill only syncs, whatever `Git hand-off` is
+set to in `~/.claude/CLAUDE.md`. This whitelist is
 deliberately narrow specifically so there's no commit path to gate at all —
 dirty repos only ever get stashed, never committed, by this skill.
 
