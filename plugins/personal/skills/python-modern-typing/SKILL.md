@@ -113,7 +113,7 @@ the Python-3.12/dependency-bump note above.
 - **Do this even when the task's new code was written in modern style
   already** — the audit is about the *rest* of the file, which may
   predate the task and still carry the old spelling.
-- Confirmed as a standing rule 2026-08-14 (PROJ-105, backend-api): the user
+- Confirmed as a standing rule 2026-08-14 (PROJ-105, api): the user
   wants this run as an explicit last step on every task, not left to
   "convert what you're touching" judgment calls per edit.
 - **For files with more than a handful of occurrences, use `pyupgrade
@@ -123,7 +123,7 @@ the Python-3.12/dependency-bump note above.
   right. It does NOT remove the now-unused `from typing import ...` names
   afterward — that cleanup (drop unused names, keep `Any`/whatever's still
   referenced) is still a manual pass.
-- **Gotcha, confirmed 2026-08-14 (PROJ-105, backend-api): a bare lowercase
+- **Gotcha, confirmed 2026-08-14 (PROJ-105, api): a bare lowercase
   builtin used as a type hint (`callable`, not `typing.Callable`) breaks at
   runtime when mechanically converted.** `Optional[callable]` is valid
   (typing subscripts accept anything), but `callable | None` is evaluated

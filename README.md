@@ -21,22 +21,32 @@ Pull updates later with `/plugin marketplace update vpplatonov-skills`.
 Skills are namespaced, e.g. `/personal:repo-pr-review`. Claude also picks
 them up automatically from natural requests ("check my PRs").
 
-## Configure your org
+## Configure your project
 
-The `repo-*` skills use two placeholders instead of a hard-coded org:
+The skills use placeholders instead of a hard-coded org, repos or branches:
 
-| Placeholder | Meaning |
-|---|---|
-| `your-org` | GitHub org (or user) whose repos the PR skills search |
-| `~/workspace/<org>/` | Local folder with those repos cloned side by side |
+| Placeholder | Default | Meaning |
+|---|---|---|
+| `your-org` | — | GitHub org (or user) whose repos the PR skills search |
+| `~/workspace/<org>/` | — | Local folder with those repos cloned side by side |
+| `<release-branch>` | `release` | Shared branch feature PRs merge into; `repo-pull` syncs to it |
+| `<main-branch>` | `main` | Production branch; the release branch is promoted into it via a PR |
+| `<promotion-repos>` | `api`, `ui` | Repos running the release → main promotion |
 
-Tell Claude the real values once, in your user-level `~/.claude/CLAUDE.md`:
+Run `/personal:init-personal-skills` once per project. It detects what it
+can with `gh`, asks you to confirm each value, and writes them to the
+`## repo-* skills` section of your user-level `~/.claude/CLAUDE.md`:
 
 ```markdown
 ## repo-* skills
 - GitHub org: my-company
 - Local workspace: ~/workspace/my-company/
+- Release branch: release
+- Main branch: main
+- Promotion repos: api, ui
 ```
+
+Real values live only in that file, never in this repo.
 
 ## Prerequisites
 
@@ -51,9 +61,10 @@ Tell Claude the real values once, in your user-level `~/.claude/CLAUDE.md`:
 | Skill | What it does |
 |---|---|
 | `repo-pr-review` | Status sweep of your own open PRs org-wide; request reviewers (asked per PR), draft fixes for unaddressed review comments |
-| `repo-pr-approve` | Deep review of PRs where you're a requested reviewer: check out, run tests, tamper-test guardrails, verify PR-body claims; two-round verdict |
+| `repo-pr-approve` | Deep review of PRs where you're a requested reviewer, including release → main promotion PRs: check out, run tests, tamper-test guardrails, verify PR-body claims; two-round verdict |
 | `repo-code-review` | Self-review loop right after `gh pr create`: Opus review-and-fix loop, then one independent Fable pass |
-| `repo-pull` | Sync every repo under `~/workspace/<org>/` to `staging` (or default branch), stashing dirty trees and fast-forwarding submodules |
+| `repo-pull` | Sync every repo under `~/workspace/<org>/` to `<release-branch>` (or default branch), stashing dirty trees and fast-forwarding submodules |
+| `init-personal-skills` | Set up the placeholders above for a new project and write them to `~/.claude/CLAUDE.md` |
 
 ### Git and CI
 
@@ -90,5 +101,5 @@ Tell Claude the real values once, in your user-level `~/.claude/CLAUDE.md`:
 
 Edit `plugins/personal/skills/<skill>/SKILL.md`, bump `version` in
 `plugins/personal/.claude-plugin/plugin.json`, commit. Keep skill content
-free of real names, ticket keys and org-specific identifiers — use the
-placeholders above.
+free of real names, ticket keys and org-, repo- or branch-specific
+identifiers — use the placeholders above.

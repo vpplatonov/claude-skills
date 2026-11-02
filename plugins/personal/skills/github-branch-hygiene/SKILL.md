@@ -1,9 +1,14 @@
 ---
 name: github-branch-hygiene
-description: Pre/post commit-push verification checklist, always stating the local/remote branch targets before recommending a commit or push, and recovering from an accidental push to the wrong shared branch (staging/preprod/main) — reset --hard + force-push, not revert, to keep GitHub history clean.
+description: Pre/post commit-push verification checklist, always stating the local/remote branch targets before recommending a commit or push, and recovering from an accidental push to the wrong shared branch (<release-branch>/<main-branch>) — reset --hard + force-push, not revert, to keep GitHub history clean.
 ---
 
 # GitHub branch hygiene
+
+> **Config:** `<release-branch>` and `<main-branch>` come from the
+> `## repo-* skills` section of `~/.claude/CLAUDE.md`. If they're unset,
+> ask the user which branches are shared (and suggest
+> `/personal:init-personal-skills`) — never guess them.
 
 **Every command below is for the user to run, unconditionally.** `git commit`, `git add`, `git push` (including `--force`/`--force-with-lease`), `git reset --hard`, `git checkout -B` against a shared branch, `git branch`, `git checkout -b`, `gh pr create` — none of these get executed by the agent itself, no matter how routine, low-risk, or clearly-the-right-move a step looks (including every step in the "Remediation" checklist below). The agent's role is always: diagnose, explain, and hand off the exact commands (or, for a PR, the drafted title/body) — never run them. This holds even mid-incident-cleanup, when moving fast feels justified.
 
@@ -17,9 +22,9 @@ Confirmed 2026-08-20, generalized from a session where the agent had previously 
 
 ## Branch creation is the user's privilege, zero exceptions — confirmed twice now
 
-Confirmed 2026-08-05, right after the exact incident this skill exists to prevent happened again: the agent ran `git checkout -b feat/proj104-editable-nested-fields origin/staging` itself, which set the new branch's upstream to `origin/staging` (see "Root cause" below) — and a later plain `git push` (also run by the user, but on a footgun the agent had already set) landed a commit directly on shared `staging`. Explaining the footgun after the fact wasn't enough; the fix is to never be the one who creates the branch in the first place.
+Confirmed 2026-08-05, right after the exact incident this skill exists to prevent happened again: the agent ran `git checkout -b feat/proj104-editable-nested-fields origin/<release-branch>` itself, which set the new branch's upstream to `origin/<release-branch>` (see "Root cause" below) — and a later plain `git push` (also run by the user, but on a footgun the agent had already set) landed a commit directly on shared `<release-branch>`. Explaining the footgun after the fact wasn't enough; the fix is to never be the one who creates the branch in the first place.
 
-**Recurred 2026-08-20 (frontend-ui): the agent did it again** — `git checkout -b PROJ-102-queue-wait-metrics origin/staging`, same shape, same missing `--no-track`, same outcome: the user's later plain `git push` landed on `staging` and auto-deployed before anyone caught it. Two occurrences of the identical mistake, months apart, means "explain the footgun and move on" doesn't work — the rule has to be followed reflexively every time, not re-derived in the moment a branch feels obviously needed.
+**Recurred 2026-08-20 (ui): the agent did it again** — `git checkout -b PROJ-102-queue-wait-metrics origin/<release-branch>`, same shape, same missing `--no-track`, same outcome: the user's later plain `git push` landed on `<release-branch>` and auto-deployed before anyone caught it. Two occurrences of the identical mistake, months apart, means "explain the footgun and move on" doesn't work — the rule has to be followed reflexively every time, not re-derived in the moment a branch feels obviously needed.
 
 **How to apply:** whenever a new branch is needed, give the user the exact `git checkout -b <name> <base>` command (with `--no-track` per the footgun note below, when applicable) and ask them to run it. Never type `git checkout -b` or `git branch` into a tool call myself, under any framing — no exceptions, not even "just this once to save a round-trip." This closes the loophole regardless of how careful the agent tries to be about tracking/upstream afterward — no branch creation by the agent, no chance of silently inheriting the wrong upstream.
 
@@ -54,21 +59,21 @@ Run this around every commit — it catches wrong-file commits and wrong-branch 
 Confirmed 2026-08-20, right after the second occurrence of the wrong-branch-push incident: a check that only happens "if unsure" doesn't happen, because the mistracked branch never *feels* unsure — it looks completely normal until the push lands somewhere unexpected. This step is now unconditional, every time, on every branch's first push:
 
 3a. `git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || echo "no upstream configured"` — run this and read the actual output before pushing, not just when something seems off.
-3b. If it names a shared branch (`staging`, `preprod`, `main`) that isn't the branch you intend to push to: **stop**, do not push — this is exactly the footgun in "Root cause" below. Fix the tracking first (`git branch --unset-upstream`, then push with `-u` to the correct remote branch name).
+3b. If it names a shared branch (`<release-branch>`, `<main-branch>`) that isn't the branch you intend to push to: **stop**, do not push — this is exactly the footgun in "Root cause" below. Fix the tracking first (`git branch --unset-upstream`, then push with `-u` to the correct remote branch name).
 3c. If it says "no upstream configured" (expected right after a `--no-track` checkout): the push must be `git push -u origin <branch-name>` explicitly — a bare `git push` will simply fail here, which is correct and safe.
 
 **After `git commit` && `git push` — confirm it landed completely, cleanly, and on the right branch:**
 4. `git status` — must read both **"nothing to commit, working tree clean"** and **"Your branch is up to date with 'origin/&lt;branch&gt;'"**. The first confirms no local leftovers; the second confirms the push actually reached that remote branch.
-5. `git fetch origin && git log --oneline -1 HEAD` compared with `git log --oneline -1 origin/<branch>` — the SHAs must match. This is the check that catches a wrong-branch push early (see root cause below): if you meant to push a feature branch but it landed on `staging`, this comparison surfaces the mismatch immediately.
+5. `git fetch origin && git log --oneline -1 HEAD` compared with `git log --oneline -1 origin/<branch>` — the SHAs must match. This is the check that catches a wrong-branch push early (see root cause below): if you meant to push a feature branch but it landed on `<release-branch>`, this comparison surfaces the mismatch immediately.
 6. `git diff HEAD origin/<branch>` — expect no output. Any output means local and remote have diverged unexpectedly.
 
 ## Recovering a wrong-branch push
 
-When a commit lands directly on a shared branch (`staging`, `preprod`, `main`) instead of the intended feature branch, fix it with **reset + force-push**, not a revert. Goal: the shared branch's history reads exactly as if the mistake never happened — no revert commit, no "revert the revert" commit, no permanent noise.
+When a commit lands directly on a shared branch (`<release-branch>`, `<main-branch>`) instead of the intended feature branch, fix it with **reset + force-push**, not a revert. Goal: the shared branch's history reads exactly as if the mistake never happened — no revert commit, no "revert the revert" commit, no permanent noise.
 
 ## Root cause this guards against
 
-`git checkout -b <new-branch> origin/<other-branch>` sets `<new-branch>`'s upstream to `origin/<other-branch>`, **not** a same-named remote branch. A later plain `git push` then lands on `<other-branch>` directly — e.g. creating a branch from `origin/staging` this way, then pushing, pushes straight to `staging`.
+`git checkout -b <new-branch> origin/<other-branch>` sets `<new-branch>`'s upstream to `origin/<other-branch>`, **not** a same-named remote branch. A later plain `git push` then lands on `<other-branch>` directly — e.g. creating a branch from `origin/<release-branch>` this way, then pushing, pushes straight to `<release-branch>`.
 
 **Prevention:** always push a brand-new branch explicitly the first time — `git push -u origin <branch-name>` — regardless of how it was created. This sets correct tracking in one step and avoids the accident entirely. Stronger still, per the strict rule above: hand off the branch-creation command itself with `--no-track` so there's no upstream to silently inherit in the first place, rather than depending on the explicit-push step happening correctly later.
 

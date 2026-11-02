@@ -19,13 +19,8 @@
   ```
   Update later with `/plugin marketplace update vpplatonov-skills`.
 
-### Tell Claude your org
-- [ ] Add to `~/.claude/CLAUDE.md` (replace with your real values):
-  ```markdown
-  ## repo-* skills
-  - GitHub org: my-company
-  - Local workspace: ~/workspace/my-company/
-  ```
+### Set up your project
+- [ ] Run `/personal:init-personal-skills`. It asks for your GitHub org, workspace folder, release branch (default `release`), main branch (default `main`) and promotion repos, suggests what it can detect with `gh`, and writes them to the `## repo-* skills` section of `~/.claude/CLAUDE.md` after your OK. Rerun it when you switch projects.
 
 ### Skills to Know About
 
@@ -33,7 +28,8 @@ PR workflows — invoke by name or just ask:
 - /personal:repo-pr-review — "check my PRs": status of your own open PRs, reviewer requests (you pick each one), drafted fixes for review comments.
 - /personal:repo-pr-approve — "what do I need to review": checks out each PR, runs tests, tamper-tests guardrails, posts a comment or approval only after your OK.
 - /personal:repo-code-review — run right after `gh pr create`: Opus review-and-fix loop, then one Fable final pass.
-- /personal:repo-pull — sync every local repo to `staging` (or default branch), stashing dirty trees safely.
+- /personal:repo-pull — sync every local repo to the release branch (or default branch), stashing dirty trees safely.
+- /personal:init-personal-skills — set up org, workspace, branches and promotion repos for a project.
 
 Applied automatically, no need to invoke:
 - github-branch-hygiene, git-local-excludes, ci-test-implementation
@@ -47,7 +43,7 @@ Built-in worth knowing:
 
 - Nothing visible to others is posted without your OK — the skills draft PR comments, approvals, Jira edits and Slack messages and wait.
 - Claude hands you commit and push commands instead of running them. Check the stated local and remote branch before you run them.
-- Always qualify a PR number with its repo (`backend-api#54`, not `#54`) — numbers collide across repos.
+- Always qualify a PR number with its repo (`api#54`, not `#54`) — numbers collide across repos.
 - Long-running or paid tests (LLM regression suites) never run in GitHub Actions; run them locally twice before calling a change CI-ready.
 
 ## Get Started
@@ -63,8 +59,8 @@ under Setup Checklist, using markdown checkboxes — [x] done, [ ] not yet. Lead
 with what they already have. One sentence per item, all in one message.
 
 Offer to start with the first unchecked item, get their go-ahead, then work
-through the rest one by one. For the CLAUDE.md step, ask for their real org
-and workspace path rather than guessing. Connectors are optional — mention
+through the rest one by one. For the project step, run
+/personal:init-personal-skills rather than guessing values. Connectors are optional — mention
 what they unlock, don't push.
 
 After setup, surface the Tips and offer the Get Started run. Don't invent

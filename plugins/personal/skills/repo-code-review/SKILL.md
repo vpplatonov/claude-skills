@@ -5,6 +5,12 @@ description: Automated, model-escalating self-review of a PR you just authored â
 
 # Copilot-style self-review for your own new PR
 
+> **Config:** `your-org`, `~/workspace/<org>/`, `<release-branch>`,
+> `<main-branch>` and `<promotion-repos>` come from the `## repo-* skills`
+> section of `~/.claude/CLAUDE.md`. If that section is missing or still
+> holds placeholder values, stop and tell the user to run
+> `/personal:init-personal-skills` â€” never guess them.
+
 The mirror image of `repo-pr-approve` (reviewing someone else's PR) and
 `repo-pr-review` (checking status on your own PRs): this one actually
 reviews and fixes a PR you just opened, before you ever request a human

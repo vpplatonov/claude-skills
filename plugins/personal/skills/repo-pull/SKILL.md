@@ -1,12 +1,18 @@
 ---
 name: repo-pull
-description: Sync every repo under ~/workspace/<org>/ to the latest origin/staging (or, for repos with no staging branch, their own remote default branch), safely handling dirty working trees via stash, plus fast-forwarding any git submodules (e.g. worker-api's shared-schema) to their own remote's latest — invoke when the user asks to "pull whole project", "sync all org repos", "/repo-pull", or similar.
+description: Sync every repo under ~/workspace/<org>/ to the latest origin/<release-branch> (or, for repos with no `<release-branch>` branch, their own remote default branch), safely handling dirty working trees via stash, plus fast-forwarding any git submodules (e.g. worker-api's shared-schema) to their own remote's latest — invoke when the user asks to "pull whole project", "sync all org repos", "/repo-pull", or similar.
 ---
 
-# Pull all org repos (sync all repos to staging, or default branch)
+# Pull all org repos (sync all repos to <release-branch>, or default branch)
+
+> **Config:** `your-org`, `~/workspace/<org>/`, `<release-branch>`,
+> `<main-branch>` and `<promotion-repos>` come from the `## repo-* skills`
+> section of `~/.claude/CLAUDE.md`. If that section is missing or still
+> holds placeholder values, stop and tell the user to run
+> `/personal:init-personal-skills` — never guess them.
 
 Brings every git repo under `~/workspace/<org>/` up to date on
-`origin/staging` — or, for a repo with no `staging` branch (its PRs merge
+`origin/<release-branch>` — or, for a repo with no `<release-branch>` branch (its PRs merge
 straight to `main`), up to date on its own remote default branch instead —
 without losing local work-in-progress or leaving any repo on a different
 branch than it started on.
@@ -44,8 +50,7 @@ dirty repos only ever get stashed, never committed, by this skill.
    done
    ```
 2. **Determine each repo's sync branch**: `git ls-remote --heads origin
-   staging` — non-empty output means `SYNC_BRANCH=staging` (unchanged from
-   before). Empty output means the repo has no `staging` branch (its PRs
+   <release-branch>` — non-empty output means `SYNC_BRANCH=<release-branch>`. Empty output means the repo has no `<release-branch>` branch (its PRs
    merge straight to `main`) — resolve its actual remote default branch
    instead of guessing `main`:
    ```
@@ -53,13 +58,13 @@ dirty repos only ever get stashed, never committed, by this skill.
    ```
    `SYNC_BRANCH` = that result (typically `main`, but stays correct for a
    repo defaulting to `master` or anything else). Every repo now gets
-   synced against one branch or the other — the old "no staging branch,
+   synced against one branch or the other — the old "no `<release-branch>` branch,
    skip entirely" outcome only still applies if this resolution itself
    fails (malformed/unreachable remote): skip pull/switch for that one
    repo, report it untouched, and continue with the rest of the run.
 3. **Record current branch** per remaining repo: `git branch --show-current`.
    This is what gets restored at the end — never assume it's `main` or
-   `staging`.
+   `<release-branch>`.
 4. **Status check**: `git status --porcelain` per repo. Collect every dirty
    repo (non-empty output) into one batch and ask the user once, listing
    each dirty repo with its file count — confirm which (if any) should be
@@ -84,7 +89,7 @@ dirty repos only ever get stashed, never committed, by this skill.
 7. **Submodule handling** — runs for every enumerated repo regardless of
    which branch it synced to in step 2 (submodule state is orthogonal to
    the parent's own branch sync; e.g. `worker-api` itself has no
-   `staging` branch and syncs against `main` instead per step 2, but its
+   `<release-branch>` branch and syncs against `main` instead per step 2, but its
    `shared-schema` submodule update is independent of that choice):
    ```
    [ -f "$d/.gitmodules" ] && git -C "$d" config --file .gitmodules \
@@ -98,7 +103,7 @@ dirty repos only ever get stashed, never committed, by this skill.
    This fast-forwards the submodule's local checkout to the tip of its own
    remote's default branch (per its own `.gitmodules` entry — no `branch =`
    key means "the submodule's default branch," `main` for
-   `shared-schema`, since it has no `staging` branch of its own). Record
+   `shared-schema`, since it has no `<release-branch>` branch of its own). Record
    the resulting commit and report old-sha → new-sha.
 
    **This deliberately leaves the submodule "modified" in the parent repo's
@@ -124,7 +129,7 @@ dirty repos only ever get stashed, never committed, by this skill.
     - **Pull result** per repo: pulled `<SYNC_BRANCH>` (old-sha → new-sha)
       / already up to date / could not resolve remote default branch —
       skipped / failed, merge aborted. Always name which branch
-      (`staging` or the resolved default) each repo actually synced to.
+      (`<release-branch>` or the resolved default) each repo actually synced to.
     - **Submodule result** per submodule found: old-sha → new-sha / already
       up to date, plus the "now shows modified in parent" note whenever the
       SHA moved.
@@ -151,7 +156,7 @@ A submodule is pinned to a specific commit by design — that pin is itself
 committed state in the parent repo. Moving the pointer to the submodule
 remote's latest is exactly analogous to `git pull` on the parent (fetch the
 newest upstream state), so it's safe to do unattended the same way pulling
-`staging` is. But *committing* that pointer bump in the parent repo is a
+`<release-branch>` is. But *committing* that pointer bump in the parent repo is a
 judgment call indistinguishable from any other "should this change land"
 decision (does the parent's code still work against the newer submodule
 commit? is this the right moment to bump it?) — exactly the kind of call

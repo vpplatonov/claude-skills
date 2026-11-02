@@ -5,6 +5,12 @@ description: Deep-verify and review open PRs across org repos where you're a req
 
 # Reviewing other people's PRs (org repos)
 
+> **Config:** `your-org`, `~/workspace/<org>/`, `<release-branch>`,
+> `<main-branch>` and `<promotion-repos>` come from the `## repo-* skills`
+> section of `~/.claude/CLAUDE.md`. If that section is missing or still
+> holds placeholder values, stop and tell the user to run
+> `/personal:init-personal-skills` — never guess them.
+
 The mirror image of `repo-pr-review`: that skill checks status on PRs *you*
 authored. This one is you acting as *reviewer* on someone else's PR — the
 exact workflow used against a teammate's stacked PR series, a pair of
@@ -21,17 +27,17 @@ Same GitLab exclusion as `repo-pr-review`: `cost-prediction` is
 GitLab-hosted (`git.project.example`) and stays excluded from every `/repo-*`
 command until a GitLab auth approach is chosen.
 
-Confirmed 2026-09-21: in a repo running a staging→preprod→prod chain, a
-branch→staging merge is ungated by design and doesn't need a review before
+Confirmed 2026-09-21: in a repo running a <release-branch> → <main-branch> chain, a
+branch → <release-branch> merge is ungated by design and doesn't need a review before
 merge (`repo-pr-review` won't request one). If you're queued as a
 reviewer on one anyway, that's an explicit ask — review it the same as any
 other PR here, this skill's own job doesn't change based on target branch.
 
 Extended 2026-09-23: the real code review for that chain now happens on
-the staging→preprod promotion PR itself (backend-api/frontend-ui) — step 1's
+the <release-branch> → <main-branch> promotion PR itself (`<promotion-repos>`) — step 1's
 enumeration always checks for it, not just when GitHub's review-requested
 marker happens to be live on it (see step 1's third source). Release-level
-preprod readiness (Jira ticket sweep, merge-conflict/integration-test
+readiness (Jira ticket sweep, merge-conflict/integration-test
 check, status transitions) is out of scope — this skill's job on
 that PR is just the code-review pass itself, same Round 1/Round 2
 discipline as any other PR here.
@@ -104,8 +110,8 @@ that replaces any free-form verdict choice — see there for how Round 1's
 outcome determines whether a Round 2 (forced Opus 5.5) pass happens at all.
 
 1. **Enumerate PRs where review is requested from you, plus PRs where
-   you've previously commented, plus every open PR into `preprod` (the
-   staging→preprod promotion and per-ticket promotions) for repos running
+   you've previously commented, plus every open PR into `<main-branch>` (the
+   <release-branch> → <main-branch> promotion and per-ticket promotions) for repos running
    that chain**, across every repo under the org:
    ```
    gh search prs --owner your-org --review-requested=@me --state open \
@@ -119,22 +125,22 @@ outcome determines whether a Round 2 (forced Opus 5.5) pass happens at all.
    the only signal that you're expected back on a PR.
 
    **Third source, added 2026-09-23**: for the repos that run a
-   staging→preprod→prod chain (e.g. `backend-api`, `frontend-ui`), the real code review for that chain now
-   happens on the staging→preprod promotion PR itself, not just on the
-   ungated branch→staging PRs. Always check for one, whether or not either
+   <release-branch> → <main-branch> chain (`<promotion-repos>`), the real code review for that chain now
+   happens on the <release-branch> → <main-branch> promotion PR itself, not just on the
+   ungated branch → <release-branch> PRs. Always check for one, whether or not either
    query above happened to catch it.
 
-   Extended 2026-10-01: list **every** open PR into `preprod`, not just
-   `head=staging`. Releases also promote per ticket from a feature or
+   Extended 2026-10-01: list **every** open PR into `<main-branch>`, not just
+   `head=<release-branch>`. Releases also promote per ticket from a feature or
    promotion branch, and those carry no review request or prior comment
    from you, so the two searches above miss them (one such PR went
    unseen this way).
    Skip PRs you authored yourself — those belong to `repo-pr-review`:
    ```
-   gh pr list --repo your-org/backend-api --base preprod \
-     --state open --json number,title,url,isDraft,updatedAt,author,headRefName
-   gh pr list --repo your-org/frontend-ui --base preprod \
-     --state open --json number,title,url,isDraft,updatedAt,author,headRefName
+   for r in <promotion-repos>; do
+     gh pr list --repo your-org/$r --base <main-branch> \
+       --state open --json number,title,url,isDraft,updatedAt,author,headRefName
+   done
    ```
    Tag any PR found this way the same as a review-requested match for step
    2's gate — it's a recurring, mandatory review point, not an opt-in "you
@@ -151,12 +157,12 @@ outcome determines whether a Round 2 (forced Opus 5.5) pass happens at all.
    form a **stacked chain** (each PR's base is the prior PR's branch) —
    review those bottom-up, since later ones only make sense once earlier
    ones are understood, and diff against the *actual* base branch, not
-   always `staging`.
+   always `<release-branch>`.
 
 2. **Dedup/inclusion gate — decide whether each PR from step 1 gets a
    Round 1 pass at all.** Handle the tags from step 1 differently:
 
-   - **PR matched the review-requested query, or the staging→preprod
+   - **PR matched the review-requested query, or the <release-branch> → <main-branch>
      promotion-PR check** — dedup check, skip if nothing changed. `gh pr comment` (this skill's only way to post a
      finding) is a plain issue-style comment, not a submitted GitHub
      review — unlike `gh pr review --approve`, it never clears the pending
@@ -300,7 +306,7 @@ outcome determines whether a Round 2 (forced Opus 5.5) pass happens at all.
      as a PR problem without ruling out your own environment first.
    - **Lockfile-commit conventions differ per repo** — `portal` does not
      commit `package-lock.json` (gitignored, CI uses `npm install`);
-     `frontend-ui` *does* commit it. Check with `git ls-files <lockfile>`
+     `ui` *does* commit it. Check with `git ls-files <lockfile>`
      before a blanket `rm -rf node_modules package-lock.json` cleanup, or
      you will delete and need to restore a tracked file.
    - **Leftover untracked files from your own earlier work in the same
@@ -452,15 +458,15 @@ exact action taken pending the user's go-ahead. A PR skipped by step 2's
 dedup check needs only its one-line "already reviewed at this head, no
 action" note, not the full shape.
 
-**Always qualify a PR number with its repo** (`backend-api#54`, not bare
+**Always qualify a PR number with its repo** (`api#54`, not bare
 `#54`), everywhere — reports to the user, Slack messages, PR comments, doc
-notes. PR numbers collide across repos in this org (e.g. `backend-api#54`
-and `frontend-ui#54` were two entirely different PRs in the same review
+notes. PR numbers collide across repos in this org (e.g. `api#54`
+and `ui#54` were two entirely different PRs in the same review
 batch), so a bare number is genuinely ambiguous, not just less polished.
 
 ## Live-verify against the real dependency when one is feasibly available
 
-For concurrency, timeout, health-check, or external-service-integration changes, mocked unit tests can't fully prove the behavior — they prove the code does what the mock lets it do. Before settling for mocked-only coverage, check whether the real dependency is actually reachable (a cached model, a container you can start, a reachable service) and run a live check: start the real service, fire genuinely concurrent requests, hit the real endpoint under real load. Confirmed 2026-08-12 (PROJ-103/PROJ-106, guard-service single-flight + backend-api outcome signals): the model was already cached locally from an earlier session, so a live run (real concurrent HTTP requests, real 503 busy responses, real Prometheus counter deltas) was one `curl` loop away and caught nothing new — but it turned "the unit tests pass" into concrete, reviewer-grade evidence ("fired two real concurrent requests, the second got a real 503 with this exact body"). Don't wait for a reviewer to ask for this — treat it as the default bar for this class of change.
+For concurrency, timeout, health-check, or external-service-integration changes, mocked unit tests can't fully prove the behavior — they prove the code does what the mock lets it do. Before settling for mocked-only coverage, check whether the real dependency is actually reachable (a cached model, a container you can start, a reachable service) and run a live check: start the real service, fire genuinely concurrent requests, hit the real endpoint under real load. Confirmed 2026-08-12 (PROJ-103/PROJ-106, guard-service single-flight + api outcome signals): the model was already cached locally from an earlier session, so a live run (real concurrent HTTP requests, real 503 busy responses, real Prometheus counter deltas) was one `curl` loop away and caught nothing new — but it turned "the unit tests pass" into concrete, reviewer-grade evidence ("fired two real concurrent requests, the second got a real 503 with this exact body"). Don't wait for a reviewer to ask for this — treat it as the default bar for this class of change.
 
 ## Why tamper-test instead of just reading the guard code
 

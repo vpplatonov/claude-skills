@@ -1,11 +1,16 @@
 ---
 name: ci-test-implementation
-description: Pytest marker taxonomy and verification protocol for org repos — unmarked/integration/long-running (e.g. backend-api's llm_regression), what GitHub Actions is allowed to run, the required local double-run before calling anything "CI-ready", and the rule that any GitHub-admin dependency (branch protection, environment secrets, Secrets Manager seeding) gets its own linked Jira follow-up ticket rather than a buried note. Apply whenever adding or changing tests in a repo with this pytest.ini shape, or wiring a new GitHub Actions workflow.
+description: Pytest marker taxonomy and verification protocol for org repos — unmarked/integration/long-running (e.g. api's llm_regression), what GitHub Actions is allowed to run, the required local double-run before calling anything "CI-ready", and the rule that any GitHub-admin dependency (branch protection, environment secrets, Secrets Manager seeding) gets its own linked Jira follow-up ticket rather than a buried note. Apply whenever adding or changing tests in a repo with this pytest.ini shape, or wiring a new GitHub Actions workflow.
 ---
 
 # CI/test implementation pattern (org repos)
 
-Confirmed 2026-09-18 while building PROJ-101 (backend-api's three evaluation
+> **Config:** `<release-branch>` and `<main-branch>` come from the
+> `## repo-* skills` section of `~/.claude/CLAUDE.md`. If they're unset,
+> ask the user which branches are shared (and suggest
+> `/personal:init-personal-skills`) — never guess them.
+
+Confirmed 2026-09-18 while building PROJ-101 (api's three evaluation
 surfaces): a real bug was caught by this pattern before it shipped — a new
 test that hit a real local Postgres was left unmarked, which would have
 made a bare `pytest` fail on every PR (no Postgres exists on a GitHub
@@ -15,7 +20,7 @@ of mistake gets caught by convention, not by accident.
 ## Marker taxonomy
 
 Every Python repo in the org with tests follows the same three-tier shape
-(confirmed in `backend-api/pytest.ini`; conda/env-per-repo mechanics
+(confirmed in `api/pytest.ini`; conda/env-per-repo mechanics
 are out of scope here):
 
 ```ini
@@ -26,7 +31,7 @@ markers =
 addopts = -m "not integration and not llm_regression"
 ```
 
-`llm_regression` here is backend-api's own name for its **long-running
+`llm_regression` here is api's own name for its **long-running
 tier** — the concept is general (any test that takes real
 minutes/real money to run, regardless of which repo or what it's actually
 testing), the marker *name* is repo-specific. Don't assume `llm_regression`
@@ -40,7 +45,7 @@ is the name to reuse elsewhere.
   Postgres container, a local Langfuse stack) — locality doesn't exempt a
   test from this marker, only whether the dependency is real/live does.
   Excluded by default; opted into via `pytest -m integration`.
-- **Long-running tier** (backend-api names its `llm_regression`; a
+- **Long-running tier** (api names its `llm_regression`; a
   different repo may have no such marker yet) — real model calls, a slow
   live pipeline, or otherwise minutes-not-seconds wall-clock, regardless
   of cost. Excluded by default same as `integration`, but with one
@@ -69,19 +74,19 @@ Confirmed 2026-09-18, generalized the same day from an initial (too
 narrow) framing of "llm_regression never runs on GitHub" — the rule is
 about the **tier** (long-running, whatever it's called in a given repo),
 not about that one marker name. Refined again the same day once a
-pre-existing counter-example turned up (`backend-api`'s `llm-regression.yml`
+pre-existing counter-example turned up (`api`'s `llm-regression.yml`
 is `workflow_dispatch`-only and does run `pytest -m llm_regression`
 directly): the actual rule is **no automatic trigger** — `pull_request`,
 `push`, `schedule` — **may ever invoke a test carrying a long-running
 marker, in any repo.** A deploy-triggered workflow that seems like a
 legitimate exception (e.g. a pre-deploy regression check firing on push
-to `preprod`) is not one: automate everything that can safely run on a
+to `<main-branch>`) is not one: automate everything that can safely run on a
 GitHub-hosted runner (liveness/readiness polling, waiting for a candidate
 image to actually be serving, posting the result), then hand off the
 actual long-running test invocation to a human running it locally — print
 or Slack the exact command, don't run it yourself on the runner. PROJ-101's
-`preprod-regression.yml` was originally built running `pytest -m
-llm_regression` directly on push-to-preprod and had to be reworked once
+`pre-deploy-regression.yml` was originally built running `pytest -m
+llm_regression` directly on push-to-<main-branch> and had to be reworked once
 this was made explicit; don't repeat that mistake for any push/pull_request/
 schedule trigger, in this repo or any other.
 
@@ -105,9 +110,9 @@ will pass in CI:
 2. **`pytest -m integration`** — proves the deeper, live-dependency
    coverage also passes (real local Postgres, real local service). Start
    the local dependency first if it isn't already running (e.g. `docker
-   compose --profile db up -d docproc-db` for backend-api).
+   compose --profile db up -d docproc-db` for api).
 
-Long-running-tier tests (`llm_regression` in backend-api, or whatever a
+Long-running-tier tests (`llm_regression` in api, or whatever a
 given repo calls it) are run as a **third, separate, manual** invocation
 (`pytest -m <that marker> ...`) when actually needed (e.g. verifying a
 model-behavior change) — never folded into either of the two runs above,

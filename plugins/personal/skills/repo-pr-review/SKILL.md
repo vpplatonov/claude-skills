@@ -5,6 +5,12 @@ description: Check status of every open pull request you authored across all org
 
 # PR review status + follow-up (org repos)
 
+> **Config:** `your-org`, `~/workspace/<org>/`, `<release-branch>`,
+> `<main-branch>` and `<promotion-repos>` come from the `## repo-* skills`
+> section of `~/.claude/CLAUDE.md`. If that section is missing or still
+> holds placeholder values, stop and tell the user to run
+> `/personal:init-personal-skills` — never guess them.
+
 Surveys every open PR you authored across all `your-org` repos,
 sorts each into one of three buckets (no review requested / awaiting review /
 has review feedback), and drives the one next action each bucket needs —
@@ -56,22 +62,22 @@ commit or push them — see step 4).
    gh pr view <number> --repo <owner>/<name> --json \
      number,title,url,reviewRequests,reviewDecision,reviews,baseRefName,headRefName
    ```
-   - **Staging-bound, no gate needed**: `baseRefName == "staging"` in a repo
-     that actually runs a staging→preprod→prod chain (check once per repo:
-     `gh api repos/<owner>/<name>/branches/preprod` succeeds — if the repo
-     has no `preprod` branch, e.g. `infra`/`worker-api`, this bucket
+   - **Release-bound, no gate needed**: `baseRefName == "<release-branch>"` in a repo
+     that actually runs a <release-branch> → <main-branch> chain (check once per repo:
+     `gh api repos/<owner>/<name>/branches/<release-branch>` succeeds — if the repo
+     has no `<release-branch>` branch, e.g. `infra`/`worker-api`, this bucket
      doesn't apply and normal classification below still governs). Confirmed
-     2026-09-21: a branch→staging merge is ungated by design (developer
+     2026-09-21: a branch → <release-branch> merge is ungated by design (developer
      merges it themselves, no reviewer needed) — the review gate for a
-     staging-chain repo lives at that repo's staging→preprod promotion PR
-     instead — check for an open `head=staging,base=preprod` PR and flag if
+     release-chain repo lives at that repo's <release-branch> → <main-branch> promotion PR
+     instead — check for an open `head=<release-branch>,base=<main-branch>` PR and flag if
      none exists). Report these
      PRs as ready-to-merge, take no reviewer-request action on them, and
      don't route them into step 3 below at all, regardless of whether they
      already carry a review request or not.
-   - **No review requested**: not staging-bound per above, and
+   - **No review requested**: not release-bound per above, and
      `reviewRequests` empty AND `reviews` empty.
-   - **Awaiting review**: not staging-bound per above; `reviewRequests`
+   - **Awaiting review**: not release-bound per above; `reviewRequests`
      non-empty, `reviews` still empty — someone's been asked, nothing
      submitted yet. Report only, no action; nudging a reviewer isn't this
      skill's job.
@@ -80,7 +86,7 @@ commit or push them — see step 4).
      `CHANGES_REQUESTED`, `COMMENTED`, and `APPROVED` (approved still gets
      reported, just with no follow-up needed). This bucket applies
      regardless of target branch -- feedback that already exists gets
-     reported and followed up the same way whether the PR is staging-bound
+     reported and followed up the same way whether the PR is release-bound
      or not.
 
 3. **No-review-requested bucket — confirm before requesting.**
@@ -118,9 +124,9 @@ commit or push them — see step 4).
      clean, no follow-up section needed.
 
 5. **Report** in this shape, grouped by repo:
-   - **Staging-bound, no gate needed**: PR title/URL, noted as ready to
+   - **Release-bound, no gate needed**: PR title/URL, noted as ready to
      merge on its own (no reviewer action taken or needed here) — the
-     review gate for this one lives at the repo's staging→preprod
+     review gate for this one lives at the repo's <release-branch> → <main-branch>
      promotion PR instead.
    - **No review requested**: PR title/URL, requested-reviewer confirmation
      result (requested `<login>` / declined by user / skipped).
@@ -130,7 +136,7 @@ commit or push them — see step 4).
      addressed/not-addressed status, proposed fixes for the unaddressed
      ones (pending your approval before anything gets edited).
 
-   **Always qualify a PR number with its repo** (`backend-api#54`, not bare
+   **Always qualify a PR number with its repo** (`api#54`, not bare
    `#54`), everywhere this shows up — the report, Slack messages, PR
    comments. PR numbers collide across repos in this org, so a bare number
    is genuinely ambiguous, not just less polished.
@@ -138,7 +144,7 @@ commit or push them — see step 4).
 ## Why ask per-PR for the reviewer, never default
 
 Each org repo has a different natural reviewer depending on who owns
-that piece (infra vs. portal vs. backend-api aren't all reviewed by the same
+that piece (infra vs. portal vs. api aren't all reviewed by the same
 person), and even within one repo the right reviewer for a given PR can
 depend on what it touches. Guessing a default and letting the user
 rubber-stamp it risks requesting the wrong person on GitHub — a visible,
