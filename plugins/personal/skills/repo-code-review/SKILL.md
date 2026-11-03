@@ -126,8 +126,8 @@ this skill:
 6. **Hand off.** Once the loop concludes clean (or hits a bound and needs
    to report out), show:
    - `git diff --stat` for everything the loop touched.
-   - A drafted commit message (see the repo's own `commit-message-style`
-     skill/convention if one exists).
+   - A drafted commit message (follow the repo's own commit-message
+     convention if one exists).
    - Default: the reminder that the user reviews, commits, and pushes
      themselves to update the actual PR — same as every other workflow in
      this org.

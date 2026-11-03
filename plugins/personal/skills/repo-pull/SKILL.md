@@ -1,6 +1,6 @@
 ---
 name: repo-pull
-description: Sync every repo under ~/workspace/<org>/ to the latest origin/<release-branch> (or, for repos with no `<release-branch>` branch, their own remote default branch), safely handling dirty working trees via stash, plus fast-forwarding any git submodules (e.g. worker-api's shared-schema) to their own remote's latest — invoke when the user asks to "pull whole project", "sync all org repos", "/repo-pull", or similar.
+description: Sync every repo under ~/workspace/<org>/ to the latest origin/<release-branch> (or, for repos with no `<release-branch>` branch, their own remote default branch), safely handling dirty working trees via stash, plus fast-forwarding any git submodules (e.g. a shared schema repo pulled in as a submodule) to their own remote's latest — invoke when the user asks to "pull whole project", "sync all org repos", "/repo-pull", or similar.
 ---
 
 # Pull all org repos (sync all repos to <release-branch>, or default branch)
@@ -40,13 +40,12 @@ dirty repos only ever get stashed, never committed, by this skill.
 ## Algorithm
 
 1. **Enumerate repos**: every immediate subdirectory of `~/workspace/<org>/`
-   containing a `.git` directory, **except `cost-prediction`**
-   (GitLab-hosted on `git.project.example`, not GitHub — excluded from every
-   `/repo-*` command for now, pending a decision on GitLab auth tooling;
-   see `repo-pr-review`'s note on the same exclusion).
+   containing a `.git` directory whose `origin` is on GitHub. Skip (and
+   report) any repo hosted elsewhere, e.g. GitLab — same GitHub-only scope
+   as `repo-pr-review`.
    ```
    for d in ~/workspace/<org>/*/; do
-     [ -d "$d/.git" ] && [ "$(basename "$d")" != "cost-prediction" ] && echo "$d"
+     [ -d "$d/.git" ] && git -C "$d" remote get-url origin 2>/dev/null | grep -q 'github\.com' && echo "$d"
    done
    ```
 2. **Determine each repo's sync branch**: `git ls-remote --heads origin
@@ -88,9 +87,9 @@ dirty repos only ever get stashed, never committed, by this skill.
    mid-merge.
 7. **Submodule handling** — runs for every enumerated repo regardless of
    which branch it synced to in step 2 (submodule state is orthogonal to
-   the parent's own branch sync; e.g. `worker-api` itself has no
-   `<release-branch>` branch and syncs against `main` instead per step 2, but its
-   `shared-schema` submodule update is independent of that choice):
+   the parent's own branch sync; e.g. a repo with no
+   `<release-branch>` branch syncs against `main` per step 2, but its
+   submodule update is independent of that choice):
    ```
    [ -f "$d/.gitmodules" ] && git -C "$d" config --file .gitmodules \
      --get-regexp path | awk '{print $2}'
@@ -102,14 +101,13 @@ dirty repos only ever get stashed, never committed, by this skill.
    ```
    This fast-forwards the submodule's local checkout to the tip of its own
    remote's default branch (per its own `.gitmodules` entry — no `branch =`
-   key means "the submodule's default branch," `main` for
-   `shared-schema`, since it has no `<release-branch>` branch of its own). Record
+   key means "the submodule's default branch," typically `main`). Record
    the resulting commit and report old-sha → new-sha.
 
    **This deliberately leaves the submodule "modified" in the parent repo's
    working tree** — the submodule now points at a newer commit than what's
-   committed in the parent (e.g. `worker-api`'s index still references
-   the old `shared-schema` SHA). That's expected and reported explicitly,
+   committed in the parent (the parent's index still references
+   the old submodule SHA). That's expected and reported explicitly,
    never silently resolved: whether to commit that pointer bump in the
    parent repo is the user's call, same as any other change this skill
    surfaces but doesn't stage. Never run `git add`/`git commit` on the

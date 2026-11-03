@@ -19,9 +19,8 @@ never silently, always with your go-ahead for anything visible to others.
 ## Scope: GitHub only, for now
 
 Covers every repo under the `your-org` GitHub org via `gh search
-prs`. `cost-prediction` is GitLab-hosted (`git.project.example`, not
-GitHub) and is **intentionally excluded** from this and every other
-`/repo-*` command until a GitLab auth approach (`glab` CLI login vs. a
+prs`. Repos hosted elsewhere (e.g. GitLab) are **intentionally excluded**
+from this and every other `/repo-*` command until a GitLab auth approach (`glab` CLI login vs. a
 raw REST PAT) is chosen — don't add GitLab merge-request scanning here
 without that decision first.
 
@@ -66,7 +65,7 @@ itself only proposes fixes, it does not commit or push them — see step 4.
    - **Release-bound, no gate needed**: `baseRefName == "<release-branch>"` in a repo
      that actually runs a <release-branch> → <main-branch> chain (check once per repo:
      `gh api repos/<owner>/<name>/branches/<release-branch>` succeeds — if the repo
-     has no `<release-branch>` branch, e.g. `infra`/`worker-api`, this bucket
+     has no `<release-branch>` branch, e.g. an infra repo, this bucket
      doesn't apply and normal classification below still governs). Confirmed
      2026-09-21: a branch → <release-branch> merge is ungated by design (developer
      merges it themselves, no reviewer needed) — the review gate for a
@@ -145,7 +144,7 @@ itself only proposes fixes, it does not commit or push them — see step 4.
 ## Why ask per-PR for the reviewer, never default
 
 Each org repo has a different natural reviewer depending on who owns
-that piece (infra vs. portal vs. api aren't all reviewed by the same
+that piece (infra vs. ui vs. api aren't all reviewed by the same
 person), and even within one repo the right reviewer for a given PR can
 depend on what it touches. Guessing a default and letting the user
 rubber-stamp it risks requesting the wrong person on GitHub — a visible,

@@ -23,9 +23,9 @@ would have missed entirely.
 
 ## Scope: any org repo, GitHub only
 
-Same GitLab exclusion as `repo-pr-review`: `cost-prediction` is
-GitLab-hosted (`git.project.example`) and stays excluded from every `/repo-*`
-command until a GitLab auth approach is chosen.
+Same exclusion as `repo-pr-review`: repos hosted outside GitHub (e.g.
+GitLab) stay excluded from every `/repo-*` command until a GitLab auth
+approach is chosen.
 
 Confirmed 2026-09-21: in a repo running a <release-branch> → <main-branch> chain, a
 branch → <release-branch> merge is ungated by design and doesn't need a review before
@@ -71,8 +71,8 @@ Read-only for everything except:
   another open branch's state.
 - Test/build tooling native to the repo (`npm install`, `pytest`,
   `docker compose ... run`, `ruff check`, `tsc --noEmit`, etc.) and, when a
-  fix requires it, a scratch file created under `ui/app/ui/atoms/_tamper*`
-  or similar — always deleted before moving on, never committed.
+  fix requires it, a scratch `_tamper*` file inside the review
+  worktree — always deleted before moving on, never committed.
 
 **Never** merge, close, or reopen a PR. Never push a fix commit — this
 skill verifies and reports, the author or the user pushes fixes. Never post
@@ -82,15 +82,15 @@ each one.
 
 ## Concurrency lock — required before step 1, and after every exit path
 
-This skill runs both manually (you, interactively) and on an unattended
-schedule (`github-watcher`, every 30 min, 15:00-02:00 next day,
-CET/CEST, `--dangerously-skip-permissions`). Both paths share one lock so
+This skill can run both manually (you, interactively) and on an optional
+unattended schedule (e.g. a cron/launchd job running `claude -p
+/personal:repo-pr-approve`). Both paths share one lock so
 they never run the review protocol at the same time:
 
 - Before step 1, try to create the lock directory:
-  `mkdir ~/workspace/github-watcher/run.lock.d`
+  `mkdir ~/.claude/repo-pr-approve.lock.d`
 - If that fails because the directory already exists: check its age first
-  (`stat -f %m ~/workspace/github-watcher/run.lock.d` on macOS). If
+  (`stat -f %m ~/.claude/repo-pr-approve.lock.d` on macOS). If
   it's older than 65 minutes, treat it as stale (a previous run crashed
   without cleaning up) — remove it, create it fresh, note the stale-lock
   recovery in your final report, and proceed. Otherwise, a review is
@@ -98,7 +98,7 @@ they never run the review protocol at the same time:
   enumerate PRs, do not touch any repo, and tell the user a review
   (automated or manual) is already running.
 - If you acquired the lock, remove it
-  (`rmdir ~/workspace/github-watcher/run.lock.d`) before you finish
+  (`rmdir ~/.claude/repo-pr-approve.lock.d`) before you finish
   — on normal completion, a Round 1 stop, a Round 2 stop, or any error.
   Never leave it behind.
 
@@ -168,7 +168,7 @@ outcome determines whether a Round 2 (forced Opus 5.5) pass happens at all.
      review — unlike `gh pr review --approve`, it never clears the pending
      review request. So a PR that stopped at a Round 1 or Round 2 finding
      keeps resurfacing in step 1's search on every later run, manual or via
-     the unattended `github-watcher` schedule, even though nothing
+     an unattended schedule, even though nothing
      about it has changed. Confirmed 2026-09-10: the
      watcher re-ran the full protocol on an unchanged PR and posted the
      same finding a second time under your name, because nothing checked
@@ -262,10 +262,10 @@ outcome determines whether a Round 2 (forced Opus 5.5) pass happens at all.
 4. **Actually run the test/lint suite**, using the repo's own documented
    convention — don't invent a different one:
    - Python repos: conda env named after the repo folder (per standing
-     convention), `pytest`; for `portal` specifically, the Docker Compose test
-     profile documented in its `CLAUDE.md`
-     (`docker compose -f docker-compose.yml -f docker-compose-override.yml
-     --profile test run --rm portal-api-test pytest ...`) — never bare `pytest`
+     convention), `pytest`; for a repo whose `CLAUDE.md` documents a Docker
+     Compose test profile, use that
+     (`docker compose ... --profile test run --rm <api-test-service> pytest ...`)
+     — never bare `pytest`
      against the host, integration tests there need the compose network.
    - JS/TS repos: `npm install`, `npx vitest run` / repo's own test script,
      `npx tsc --noEmit` or the repo's `typecheck` script, the repo's own
@@ -279,9 +279,9 @@ outcome determines whether a Round 2 (forced Opus 5.5) pass happens at all.
 
 5. **Repo/environment gotchas that produce false findings** — rule these
    out before reporting anything as a real problem:
-   - **Shared test-DB contamination (portal, and any repo with a similar
-     Docker Compose Postgres setup).** The `portal-api-test` profile and the
-     persistent `portal-api` dev container point at the *same* Postgres
+   - **Shared test-DB contamination (any repo with a Docker Compose
+     Postgres setup).** The test profile (`<api-test-service>`) and the
+     persistent dev container often point at the *same* Postgres
      database. Two branches that each define a same-numbered Alembic
      revision (a documented, expected collision during a stacked-PR
      rollout — e.g. two sibling PRs both adding their own "0005") will
@@ -289,7 +289,7 @@ outcome determines whether a Round 2 (forced Opus 5.5) pass happens at all.
      alembic sees itself "already at head" by revision number and skips
      applying the branch's actual migration content. Signature errors:
      `column X does not exist`, `Can't locate revision identified by 'N'`.
-     Fix: `docker compose exec -T portal-db psql -U portal -d portal -c "DROP SCHEMA
+     Fix: `docker compose exec -T <db-service> psql -U <user> -d <db> -c "DROP SCHEMA
      public CASCADE; CREATE SCHEMA public;"`, then rerun — don't conclude
      the PR is broken until this is ruled out.
    - **Local Node version newer than CI's pinned version** can break the
@@ -304,9 +304,9 @@ outcome determines whether a Round 2 (forced Opus 5.5) pass happens at all.
      node_modules package-lock.json && npm cache clean --force && npm
      install`, repeat 2-3x to confirm it's not a fluke). Don't report this
      as a PR problem without ruling out your own environment first.
-   - **Lockfile-commit conventions differ per repo** — `portal` does not
-     commit `package-lock.json` (gitignored, CI uses `npm install`);
-     `ui` *does* commit it. Check with `git ls-files <lockfile>`
+   - **Lockfile-commit conventions differ per repo** — some repos don't
+     commit `package-lock.json` (gitignored, CI uses `npm install`),
+     others do. Check with `git ls-files <lockfile>`
      before a blanket `rm -rf node_modules package-lock.json` cleanup, or
      you will delete and need to restore a tracked file.
    - **Leftover untracked files from your own earlier work in the same
@@ -466,7 +466,7 @@ batch), so a bare number is genuinely ambiguous, not just less polished.
 
 ## Live-verify against the real dependency when one is feasibly available
 
-For concurrency, timeout, health-check, or external-service-integration changes, mocked unit tests can't fully prove the behavior — they prove the code does what the mock lets it do. Before settling for mocked-only coverage, check whether the real dependency is actually reachable (a cached model, a container you can start, a reachable service) and run a live check: start the real service, fire genuinely concurrent requests, hit the real endpoint under real load. Confirmed 2026-08-12 (PROJ-103/PROJ-106, guard-service single-flight + api outcome signals): the model was already cached locally from an earlier session, so a live run (real concurrent HTTP requests, real 503 busy responses, real Prometheus counter deltas) was one `curl` loop away and caught nothing new — but it turned "the unit tests pass" into concrete, reviewer-grade evidence ("fired two real concurrent requests, the second got a real 503 with this exact body"). Don't wait for a reviewer to ask for this — treat it as the default bar for this class of change.
+For concurrency, timeout, health-check, or external-service-integration changes, mocked unit tests can't fully prove the behavior — they prove the code does what the mock lets it do. Before settling for mocked-only coverage, check whether the real dependency is actually reachable (a cached model, a container you can start, a reachable service) and run a live check: start the real service, fire genuinely concurrent requests, hit the real endpoint under real load. Confirmed 2026-08-12 (PROJ-103/PROJ-106, an inference service's single-flight guard + api outcome signals): the model was already cached locally from an earlier session, so a live run (real concurrent HTTP requests, real 503 busy responses, real Prometheus counter deltas) was one `curl` loop away and caught nothing new — but it turned "the unit tests pass" into concrete, reviewer-grade evidence ("fired two real concurrent requests, the second got a real 503 with this exact body"). Don't wait for a reviewer to ask for this — treat it as the default bar for this class of change.
 
 ## Why tamper-test instead of just reading the guard code
 

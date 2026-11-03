@@ -1,6 +1,6 @@
 ---
 name: ci-test-implementation
-description: Pytest marker taxonomy and verification protocol for org repos — unmarked/integration/long-running (e.g. api's llm_regression), what GitHub Actions is allowed to run, the required local double-run before calling anything "CI-ready", and the rule that any GitHub-admin dependency (branch protection, environment secrets, Secrets Manager seeding) gets its own linked Jira follow-up ticket rather than a buried note. Apply whenever adding or changing tests in a repo with this pytest.ini shape, or wiring a new GitHub Actions workflow.
+description: Pytest marker taxonomy and verification protocol for org repos — unmarked/integration/long-running (e.g. an `llm_regression` marker), what GitHub Actions is allowed to run, the required local double-run before calling anything "CI-ready", and the rule that any GitHub-admin dependency (branch protection, environment secrets, Secrets Manager seeding) gets its own linked Jira follow-up ticket rather than a buried note. Apply whenever adding or changing tests in a repo with this pytest.ini shape, or wiring a new GitHub Actions workflow.
 ---
 
 # CI/test implementation pattern (org repos)
@@ -10,8 +10,7 @@ description: Pytest marker taxonomy and verification protocol for org repos — 
 > ask the user which branches are shared (and suggest
 > `/personal:init-personal-skills`) — never guess them.
 
-Confirmed 2026-09-18 while building PROJ-101 (api's three evaluation
-surfaces): a real bug was caught by this pattern before it shipped — a new
+Confirmed 2026-09-18 while building a new evaluation feature: a real bug was caught by this pattern before it shipped — a new
 test that hit a real local Postgres was left unmarked, which would have
 made a bare `pytest` fail on every PR (no Postgres exists on a GitHub
 runner) instead of being cleanly skipped. This skill exists so that class
@@ -20,18 +19,18 @@ of mistake gets caught by convention, not by accident.
 ## Marker taxonomy
 
 Every Python repo in the org with tests follows the same three-tier shape
-(confirmed in `api/pytest.ini`; conda/env-per-repo mechanics
+(example `pytest.ini` below; conda/env-per-repo mechanics
 are out of scope here):
 
 ```ini
 [pytest]
 markers =
-    integration: requires live external service credentials (e.g. SendGrid) - excluded by default, run with -m integration
-    llm_regression: exercises the real pipeline via a live DeepInfra-backed doc-processor-local - excluded by default (real LLM cost/latency), run with -m llm_regression
+    integration: requires live external service credentials (e.g. an email API) - excluded by default, run with -m integration
+    llm_regression: exercises the real pipeline against a live LLM provider - excluded by default (real LLM cost/latency), run with -m llm_regression
 addopts = -m "not integration and not llm_regression"
 ```
 
-`llm_regression` here is api's own name for its **long-running
+`llm_regression` here is one repo's own name for its **long-running
 tier** — the concept is general (any test that takes real
 minutes/real money to run, regardless of which repo or what it's actually
 testing), the marker *name* is repo-specific. Don't assume `llm_regression`
@@ -45,7 +44,7 @@ is the name to reuse elsewhere.
   Postgres container, a local Langfuse stack) — locality doesn't exempt a
   test from this marker, only whether the dependency is real/live does.
   Excluded by default; opted into via `pytest -m integration`.
-- **Long-running tier** (api names its `llm_regression`; a
+- **Long-running tier** (e.g. `llm_regression`; a
   different repo may have no such marker yet) — real model calls, a slow
   live pipeline, or otherwise minutes-not-seconds wall-clock, regardless
   of cost. Excluded by default same as `integration`, but with one
@@ -62,8 +61,7 @@ both, in which case it can carry both markers.
 **A new test that touches a live/local-container dependency must get the
 `integration` marker before it's considered done — not "it happens to
 self-skip when unreachable."** A `skipif(not reachable())` guard is fine
-as defense-in-depth (see `test_feedback_correction_dedup.py`,
-`test_feedback_scorer.py`), but it is not a substitute for the marker: the
+as defense-in-depth, but it is not a substitute for the marker: the
 marker is what makes `-m "not integration"` a correct, honest description
 of "this run touched nothing external," rather than something that
 happens to be true by luck of what's reachable on this machine right now.
@@ -74,8 +72,8 @@ Confirmed 2026-09-18, generalized the same day from an initial (too
 narrow) framing of "llm_regression never runs on GitHub" — the rule is
 about the **tier** (long-running, whatever it's called in a given repo),
 not about that one marker name. Refined again the same day once a
-pre-existing counter-example turned up (`api`'s `llm-regression.yml`
-is `workflow_dispatch`-only and does run `pytest -m llm_regression`
+pre-existing counter-example turned up (a manual regression workflow
+that is `workflow_dispatch`-only and does run `pytest -m llm_regression`
 directly): the actual rule is **no automatic trigger** — `pull_request`,
 `push`, `schedule` — **may ever invoke a test carrying a long-running
 marker, in any repo.** A deploy-triggered workflow that seems like a
@@ -84,16 +82,16 @@ to `<main-branch>`) is not one: automate everything that can safely run on a
 GitHub-hosted runner (liveness/readiness polling, waiting for a candidate
 image to actually be serving, posting the result), then hand off the
 actual long-running test invocation to a human running it locally — print
-or Slack the exact command, don't run it yourself on the runner. PROJ-101's
-`pre-deploy-regression.yml` was originally built running `pytest -m
+or Slack the exact command, don't run it yourself on the runner. A pre-deploy
+regression workflow was originally built running `pytest -m
 llm_regression` directly on push-to-<main-branch> and had to be reworked once
 this was made explicit; don't repeat that mistake for any push/pull_request/
 schedule trigger, in this repo or any other.
 
 **A manual `workflow_dispatch`-only workflow is the one narrow exception**,
 since a human explicitly clicking "run" is the same act as running it
-locally, just on a shared runner instead of a laptop — that's what
-`llm-regression.yml` already is, and it's fine as-is. The line is: would
+locally, just on a shared runner instead of a laptop — a manual
+regression workflow like that is fine as-is. The line is: would
 this test ever run *without* a person deciding, right then, to run it?
 If yes (any push/PR/cron trigger), it's not allowed. If a human has to
 show up and press the button every time, it's allowed.
@@ -110,9 +108,9 @@ will pass in CI:
 2. **`pytest -m integration`** — proves the deeper, live-dependency
    coverage also passes (real local Postgres, real local service). Start
    the local dependency first if it isn't already running (e.g. `docker
-   compose --profile db up -d docproc-db` for api).
+   compose --profile db up -d <db-service>`).
 
-Long-running-tier tests (`llm_regression` in api, or whatever a
+Long-running-tier tests (e.g. `llm_regression`, or whatever a
 given repo calls it) are run as a **third, separate, manual** invocation
 (`pytest -m <that marker> ...`) when actually needed (e.g. verifying a
 model-behavior change) — never folded into either of the two runs above,
@@ -137,8 +135,8 @@ description or a code comment alone. File a separate Jira ticket:
   ticket, so anyone reading the original ticket later sees the dependency
   immediately rather than having to reconstruct it from a PR thread.
 
-This mirrors why a follow-up ticket got filed during PR review work earlier the same
-day (a worker-api follow-up, linked back to its origin ticket) — the same
+This mirrors the follow-up tickets filed during PR review work (each
+linked back to its origin ticket) — the same
 discipline, just now also covering infra/ops actions discovered while
 *building* something, not only while *reviewing* someone else's PR.
 
