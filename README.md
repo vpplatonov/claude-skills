@@ -33,6 +33,7 @@ The skills use placeholders instead of a hard-coded org, repos or branches:
 | `<main-branch>` | `main` | Production branch; the release branch is promoted into it via a PR |
 | `<promotion-repos>` | `api`, `ui` | Repos running the release → main promotion |
 | Git hand-off | `on` | `on`: Claude hands you git commands instead of running them. `off`: Claude runs them itself (see below) |
+| Slack channel ID | empty | Company-specific channel for automated run summaries; asked per project, never defaulted |
 
 Run `/personal:init-personal-skills` once per project. It detects what it
 can with `gh`, asks you to confirm each value, and writes them to the
@@ -46,6 +47,7 @@ can with `gh`, asks you to confirm each value, and writes them to the
 - Main branch: main
 - Promotion repos: api, ui
 - Git hand-off: on
+- Slack channel ID: C0123456789
 ```
 
 Real values live only in that file, never in this repo.
@@ -91,6 +93,12 @@ Real values live only in that file, never in this repo.
 | Skill | What it does |
 |---|---|
 | `torch-apple-silicon-mps` | Verified facts about torch on Apple Silicon: MPS speed-up, Rosetta irrelevance, MPS is not fork-safe |
+
+## Tools (optional)
+
+| Tool | What it does |
+|---|---|
+| [`tools/repo-pr-watcher`](tools/repo-pr-watcher/README.md) | Runs `repo-pr-approve` on a launchd schedule, **fully unattended** — posts approvals/comments with no confirmation. Not part of the plugin; off until you run its `install.sh` |
 
 ## Ground rules baked into every skill
 

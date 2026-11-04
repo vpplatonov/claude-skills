@@ -20,7 +20,7 @@
   Update later with `/plugin marketplace update vpplatonov-skills`.
 
 ### Set up your project
-- [ ] Run `/personal:init-personal-skills`. It asks for your GitHub org, workspace folder, release branch (default `release`), main branch (default `main`), promotion repos and the git hand-off rule (default `on`), suggests what it can detect with `gh`, and writes them to the `## repo-* skills` section of `~/.claude/CLAUDE.md` after your OK. Rerun it when you switch projects.
+- [ ] Run `/personal:init-personal-skills`. It asks for your GitHub org, workspace folder, release branch (default `release`), main branch (default `main`), promotion repos, the git hand-off rule (default `on`) and your company's Slack channel ID (optional), suggests what it can detect with `gh`, and writes them to the `## repo-* skills` section of `~/.claude/CLAUDE.md` after your OK. Rerun it when you switch projects.
 
 ### Skills to Know About
 
@@ -35,6 +35,9 @@ Applied automatically, no need to invoke:
 - github-branch-hygiene, git-local-excludes, ci-test-implementation
 - no-pii-in-artifacts, no-ticket-names-in-filenames, python-modern-typing
 - ticket-attachments-step-zero, jira-new-ticket-creation, torch-apple-silicon-mps
+
+Optional, not part of the plugin:
+- tools/repo-pr-watcher — runs repo-pr-approve on a schedule, unattended (posts without asking). Off until you run its install.sh.
 
 Built-in worth knowing:
 - /compact — summarize a long session to keep going; useful on long PR/review sessions.

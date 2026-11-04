@@ -83,8 +83,8 @@ each one.
 ## Concurrency lock — required before step 1, and after every exit path
 
 This skill can run both manually (you, interactively) and on an optional
-unattended schedule (e.g. a cron/launchd job running `claude -p
-/personal:repo-pr-approve`). Both paths share one lock so
+unattended schedule (`tools/repo-pr-watcher` in this plugin's repo, a
+launchd job running `claude -p /personal:repo-pr-approve`). Both paths share one lock so
 they never run the review protocol at the same time:
 
 - Before step 1, try to create the lock directory:
