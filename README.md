@@ -67,6 +67,7 @@ Real values live only in that file, never in this repo.
 | `repo-pr-review` | Status sweep of your own open PRs org-wide; request reviewers (asked per PR), draft fixes for unaddressed review comments |
 | `repo-pr-approve` | Deep review of PRs where you're a requested reviewer, including release → main promotion PRs: check out, run tests, tamper-test guardrails, verify PR-body claims; two-round verdict |
 | `repo-code-review` | Self-review loop right after `gh pr create`: Opus review-and-fix loop, then one independent Fable pass |
+| `gh-notifications` | Digest of unread GitHub notifications for the configured org: what needs you, activity on your work, FYI noise as counts; PR state checked, next skill suggested. Read-only unless you approve mark-read/unwatch |
 | `repo-pull` | Sync every repo under `~/workspace/<org>/` to `<release-branch>` (or default branch), stashing dirty trees and fast-forwarding submodules |
 | `init-personal-skills` | Set up the placeholders above for a new project and write them to `~/.claude/CLAUDE.md` |
 
@@ -99,7 +100,7 @@ Real values live only in that file, never in this repo.
 | Tool | What it does |
 |---|---|
 | [`tools/git-config`](tools/git-config/README.md) | Global git setup, safe to rerun: identity (asked, never built in), optional SSH signing, aliases, and the safety defaults the skills rely on (`branch.autoSetupMerge=false`, `push.autoSetupRemote=true`). `--org-identity <dir> --email <work-email>` makes repos under `<dir>` commit with a company email |
-| [`tools/repo-pr-watcher`](tools/repo-pr-watcher/README.md) | Runs `repo-pr-approve` on a launchd schedule, **fully unattended** — posts approvals/comments with no confirmation. Not part of the plugin; off until you run its `install.sh` |
+| [`tools/repo-pr-watcher`](tools/repo-pr-watcher/README.md) | Runs `repo-pr-approve` on a launchd schedule, skipping ticks with no new org review activity (via `gh-notifications`' filter), **fully unattended** — posts approvals/comments with no confirmation. Not part of the plugin; off until you run its `install.sh` |
 
 ## Ground rules baked into every skill
 

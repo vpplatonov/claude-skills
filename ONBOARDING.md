@@ -28,6 +28,7 @@ PR workflows — invoke by name or just ask:
 - /personal:repo-pr-review — "check my PRs": status of your own open PRs, reviewer requests (you pick each one), drafted fixes for review comments.
 - /personal:repo-pr-approve — "what do I need to review": checks out each PR, runs tests, tamper-tests guardrails, posts a comment or approval only after your OK.
 - /personal:repo-code-review — run right after `gh pr create`: Opus review-and-fix loop, then one Fable final pass.
+- /personal:gh-notifications — "what's new on GitHub": unread notifications for your org, sorted into what needs you vs. noise.
 - /personal:repo-pull — sync every local repo to the release branch (or default branch), stashing dirty trees safely.
 - /personal:init-personal-skills — set up org, workspace, branches and promotion repos for a project.
 

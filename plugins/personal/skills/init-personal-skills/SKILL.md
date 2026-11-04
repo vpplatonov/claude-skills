@@ -32,6 +32,8 @@ Only if the user opts into the unattended PR watcher (step 7), also:
 - PR watcher window: 15:00-02:00
 - PR watcher timezone: Europe/Berlin
 - PR watcher interval: 30m
+- PR watcher precheck: on
+- PR watcher max skip: 6h
 ```
 
 | Key | Used by | Default suggestion |
@@ -43,7 +45,7 @@ Only if the user opts into the unattended PR watcher (step 7), also:
 | Promotion repos | repos running the release → main promotion; `repo-pr-approve` lists their open PRs into the main branch | detected, see step 4 |
 | Git hand-off | `on`: Claude never commits, pushes, creates branches/PRs or merges — it hands you the commands. `off`: Claude runs them itself, still asking before force-pushes, resets, direct pushes to shared branches and merges (`github-branch-hygiene`, `repo-code-review`, `repo-pr-review`) | `on` |
 | Slack channel ID | `tools/repo-pr-watcher` run summary; company-specific | none — always asked, empty allowed (= no summary) |
-| PR watcher window / timezone / interval | `tools/repo-pr-watcher` only | any time / system local / `30m` |
+| PR watcher window / timezone / interval / precheck / max skip | `tools/repo-pr-watcher` only | any time / system local / `30m` / `on` / `6h` |
 
 ## Steps
 
@@ -89,7 +91,10 @@ Only if the user opts into the unattended PR watcher (step 7), also:
    confirmation). If no, write none of the `PR watcher` keys (remove them
    if the section has them). If yes, ask for the active window (e.g.
    `15:00-02:00`, empty = any time), its IANA timezone (empty = system
-   local) and the interval (`10m`/`30m`/`1h`, default `30m`). Never run
+   local), the interval (`10m`/`30m`/`1h`, default `30m`), and whether to
+   skip ticks with no new org notifications (`PR watcher precheck`, default
+   `on`; a full run still happens at least every `PR watcher max skip`,
+   default `6h`). Never run
    its `install.sh` yourself — tell the user to run it after step 10, and
    to rerun it whenever the interval changes.
 8. **Git safety defaults and org identity.** Read-only check first:

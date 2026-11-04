@@ -5,8 +5,10 @@ Config comes from the `## repo-* skills` section of ~/.claude/CLAUDE.md
 (written by /personal:init-personal-skills); REPO_WATCHER_* environment
 variables override it. See README.md.
 
-    run_pr_approve.py                     run once, if inside the window and the lock is free
-    run_pr_approve.py --dry-run           print resolved config, window and lock state; never runs claude
+    run_pr_approve.py                     run once, if inside the window, the lock is free
+                                          and the notifications pre-check finds something
+    run_pr_approve.py --dry-run           print resolved config, window, lock and pre-check
+                                          decision; never runs claude
     run_pr_approve.py --interval-seconds  print the configured interval (used by install.sh)
 """
 from __future__ import annotations  # `X | None` on macOS's system python3 (3.9)
@@ -18,7 +20,7 @@ import shutil
 import subprocess
 import sys
 import time
-from datetime import datetime, time as dtime
+from datetime import datetime, timedelta, timezone, time as dtime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -30,10 +32,18 @@ LOG_DIR = Path.home() / "Library" / "Logs" / "repo-pr-watcher"
 STALE_LOCK_SECONDS = 65 * 60
 RUN_TIMEOUT_SECONDS = 55 * 60
 SKILL = "/personal:repo-pr-approve"
+# Start time (UTC, ISO-8601) of the last full run that exited 0.
+STATE_FILE = Path.home() / ".claude" / "repo-pr-watcher.last-run"
+# Notification reasons that can mean a PR needs (another) review from you.
+# A subset of the gh-notifications skill's "Needs you"/"Your work" buckets.
+ACTIVE_REASONS = {"review_requested", "mention", "team_mention", "assign", "author", "comment"}
 
 # CLAUDE.md key -> (environment override, default)
 KEYS = {
+    "GitHub org": ("REPO_WATCHER_ORG", ""),                    # empty: pre-check skipped
     "Local workspace": ("REPO_WATCHER_WORKSPACE", ""),
+    "PR watcher precheck": ("REPO_WATCHER_PRECHECK", "on"),   # off: always a full run
+    "PR watcher max skip": ("REPO_WATCHER_MAX_SKIP", "6h"),   # longest gap between full runs
     "Slack channel ID": ("REPO_WATCHER_SLACK_CHANNEL", ""),  # empty: no run summary
     "PR watcher window": ("REPO_WATCHER_WINDOW", ""),        # empty: any time
     "PR watcher timezone": ("REPO_WATCHER_TZ", ""),          # empty: system local time
@@ -83,10 +93,10 @@ def parse_window(value: str) -> tuple[dtime, dtime] | None:
     return dtime(h1, m1), dtime(h2, m2)
 
 
-def parse_interval(value: str) -> int:
+def parse_interval(value: str, key: str = "PR watcher interval") -> int:
     m = re.fullmatch(r"(\d+)\s*([smh]?)", value.strip())
     if not m:
-        sys.exit(f"PR watcher interval must look like 30m, 1h or 600s, got {value!r}")
+        sys.exit(f"{key} must look like 30m, 1h or 600s, got {value!r}")
     return int(m[1]) * {"": 1, "s": 1, "m": 60, "h": 3600}[m[2]]
 
 
@@ -106,6 +116,51 @@ def lock_status() -> str:
         return "free"
     age = time.time() - LOCK_DIR.stat().st_mtime
     return "stale" if age > STALE_LOCK_SECONDS else "held"
+
+
+def read_last_run() -> datetime | None:
+    try:
+        return datetime.fromisoformat(STATE_FILE.read_text().strip())
+    except (FileNotFoundError, ValueError):
+        return None
+
+
+def org_activity(org: str, since: datetime) -> list[str]:
+    """`repo#reason` for each org notification thread with an active reason
+    updated since `since` — read or unread, so reading a notification on the
+    web never hides it. Raises on any gh/API failure."""
+    out = subprocess.run(
+        ["gh", "api", "notifications", "--paginate", "-X", "GET",
+         "-f", "all=true", "-f", f"since={since.astimezone(timezone.utc):%Y-%m-%dT%H:%M:%SZ}",
+         "--jq", ".[] | [.repository.owner.login, .repository.name, .reason] | @tsv"],
+        capture_output=True, text=True, timeout=120, check=True,
+    ).stdout
+    hits = []
+    for line in out.splitlines():
+        owner, repo, reason = line.split("\t")
+        if owner.lower() == org.lower() and reason in ACTIVE_REASONS:
+            hits.append(f"{repo}#{reason}")
+    return hits
+
+
+def precheck(cfg: dict[str, str], now: datetime) -> tuple[bool, str]:
+    """(run, why). Fails open: anything unexpected means a full run."""
+    if cfg["PR watcher precheck"].lower() == "off":
+        return True, "pre-check off"
+    if not cfg["GitHub org"]:
+        return True, "no GitHub org configured"
+    last = read_last_run()
+    if last is None:
+        return True, "no previous successful run"
+    if now - last >= timedelta(seconds=parse_interval(cfg["PR watcher max skip"], "PR watcher max skip")):
+        return True, f"last full run {last.isoformat()} is older than {cfg['PR watcher max skip']}"
+    try:
+        hits = org_activity(cfg["GitHub org"], last)
+    except Exception as e:  # noqa: BLE001 — any failure must not block a review
+        return True, f"pre-check failed ({e.__class__.__name__}), running anyway"
+    if hits:
+        return True, f"{len(hits)} active notification(s) since {last.isoformat()}: {', '.join(sorted(set(hits)))}"
+    return False, f"no new {cfg['GitHub org']} activity since {last.isoformat()}"
 
 
 def automation_directive(workspace: Path, slack_channel: str) -> str:
@@ -147,6 +202,8 @@ def main(argv: list[str]) -> None:
             print(f"{key}: {value or '(empty)'}")
         print(f"now={now.isoformat()} in_window={in_window(now, window)} lock={status} "
               f"workspace_exists={workspace.is_dir()} claude={shutil.which('claude')}")
+        run, why = precheck(cfg, now)
+        print(f"last_full_run={read_last_run()} precheck={'run' if run else 'skip'} ({why})")
         print("(dry run — claude was NOT invoked)")
         return
 
@@ -171,6 +228,12 @@ def main(argv: list[str]) -> None:
         logging.warning("Lock is stale (>%ds old) — removing; a previous run likely crashed", STALE_LOCK_SECONDS)
         LOCK_DIR.rmdir()
 
+    run, why = precheck(cfg, now)
+    if not run:
+        logging.info("Pre-check: %s — skipping", why)
+        return
+    logging.info("Pre-check: %s", why)
+
     logging.info("Starting %s run at %s", SKILL, now.isoformat())
     try:
         result = subprocess.run(
@@ -186,6 +249,9 @@ def main(argv: list[str]) -> None:
     logging.info("STDOUT:\n%s", result.stdout)
     if result.stderr:
         logging.info("STDERR:\n%s", result.stderr)
+    # Only a clean run moves the pre-check's "since"; a failed one is retried.
+    if result.returncode == 0:
+        STATE_FILE.write_text(now.astimezone(timezone.utc).isoformat() + "\n")
 
 
 if __name__ == "__main__":

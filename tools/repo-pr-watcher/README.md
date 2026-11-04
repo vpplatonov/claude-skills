@@ -1,7 +1,7 @@
 # repo-pr-watcher
 
-Runs `/personal:repo-pr-approve` on a schedule (macOS launchd), **fully
-unattended**: it posts real GitHub approvals and comments, and Slack DMs to
+Runs `/personal:repo-pr-approve` on a schedule (macOS launchd), only when
+the org has new review activity (see Pre-check), **fully unattended**: it posts real GitHub approvals and comments, and Slack DMs to
 PR authors, with no human confirmation. That's the point of it — install it
 only if that's what you want. It is not part of the plugin and does nothing
 until you run `install.sh`.
@@ -18,19 +18,52 @@ edit the `## repo-* skills` section of `~/.claude/CLAUDE.md` yourself:
 
 | Key | Default | Meaning |
 |---|---|---|
+| `GitHub org` | — | Org whose notifications the pre-check looks at; empty = no pre-check |
 | `Local workspace` | — (required) | Folder the run starts in; repos are cloned under it |
 | `Slack channel ID` | empty | Company-specific channel for the run summary; empty = no summary |
 | `PR watcher window` | empty = any time | Active hours, e.g. `15:00-02:00` (may wrap past midnight) |
 | `PR watcher timezone` | system local | IANA name for the window, e.g. `Europe/Berlin` |
 | `PR watcher interval` | `30m` | How often launchd fires: `10m`, `30m`, `1h`, `600s` |
+| `PR watcher precheck` | `on` | `off` = start a full review run on every tick |
+| `PR watcher max skip` | `6h` | Longest gap between full runs, whatever the pre-check says |
 
-Environment variables override the file: `REPO_WATCHER_WORKSPACE`,
-`REPO_WATCHER_SLACK_CHANNEL`, `REPO_WATCHER_WINDOW`, `REPO_WATCHER_TZ`,
-`REPO_WATCHER_INTERVAL`.
+Environment variables override the file: `REPO_WATCHER_ORG`,
+`REPO_WATCHER_WORKSPACE`, `REPO_WATCHER_SLACK_CHANNEL`, `REPO_WATCHER_WINDOW`,
+`REPO_WATCHER_TZ`, `REPO_WATCHER_INTERVAL`, `REPO_WATCHER_PRECHECK`,
+`REPO_WATCHER_MAX_SKIP`.
 
 Window, timezone, workspace and Slack channel are read fresh on every run.
 The interval is baked into the launchd job: rerun `install.sh` after
 changing it.
+
+## Pre-check: skip ticks with nothing new
+
+Before starting Claude, each tick asks GitHub (read-only, no Claude, a
+second or two) whether anything happened in `GitHub org` since the last
+successful full run:
+
+```
+gh api notifications --paginate -X GET -f all=true -f since=<last full run>
+  keep: repo owner == <GitHub org>, reason in review_requested, mention,
+        team_mention, assign, author, comment
+```
+
+- Something found → full `/personal:repo-pr-approve` run, as before.
+- Nothing found → the tick is skipped and logged (`no new <org> activity since …`).
+- `all=true` counts notifications you already read on github.com, so
+  reading one never makes the watcher skip a review. Nothing is marked read.
+- A full run still happens when the last one is older than
+  `PR watcher max skip` — some PRs the skill must review (e.g. release →
+  main promotions) don't always notify you.
+- It fails open: no org configured, no previous run, or any `gh`/API error
+  means a full run.
+- The last full run's start time is saved in
+  `~/.claude/repo-pr-watcher.last-run`, only when the run exits 0 — a
+  failed or timed-out run is retried on the next tick. Delete the file to
+  force a full run.
+
+The `gh-notifications` skill shows the same notifications as a digest
+when you want to look yourself.
 
 ## Install / uninstall
 
@@ -48,7 +81,8 @@ Check it's loaded: `launchctl list | grep local.repo-pr-watcher`
 ```
 
 Prints the resolved config, whether now is inside the window, the lock
-state, and whether the workspace and `claude` are found — without invoking
+state, the pre-check decision (and why), and whether the workspace and
+`claude` are found — without invoking
 `claude`. Running the script with no arguments does a real run.
 
 ## Logs
