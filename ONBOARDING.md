@@ -20,7 +20,7 @@
   Update later with `/plugin marketplace update vpplatonov-skills`.
 
 ### Set up your project
-- [ ] Run `/personal:init-personal-skills`. It asks for your GitHub org, workspace folder, release branch (default `release`), main branch (default `main`), promotion repos, the git hand-off rule (default `on`) and your company's Slack channel ID (optional), suggests what it can detect with `gh`, and writes them to the `## repo-* skills` section of `~/.claude/CLAUDE.md` after your OK. Rerun it when you switch projects.
+- [ ] Run `/personal:init-personal-skills`. It asks for your GitHub org, workspace folder, release branch (default `release`), main branch (default `main`), promotion repos, the git hand-off rule (default `on`) your company's Slack channel ID and org email (both optional), suggests what it can detect with `gh`, and writes them to the `## repo-* skills` section of `~/.claude/CLAUDE.md` after your OK. Rerun it when you switch projects.
 
 ### Skills to Know About
 
@@ -28,6 +28,7 @@ PR workflows — invoke by name or just ask:
 - /personal:repo-pr-review — "check my PRs": status of your own open PRs, reviewer requests (you pick each one), drafted fixes for review comments.
 - /personal:repo-pr-approve — "what do I need to review": checks out each PR, runs tests, tamper-tests guardrails, posts a comment or approval only after your OK.
 - /personal:repo-code-review — run right after `gh pr create`: Opus review-and-fix loop, then one Fable final pass.
+- /personal:github-email-routing — org GitHub emails to your org inbox, personal ones stay in your personal inbox.
 - /personal:gh-notifications — "what's new on GitHub": unread notifications for your org, sorted into what needs you vs. noise.
 - /personal:repo-pull — sync every local repo to the release branch (or default branch), stashing dirty trees safely.
 - /personal:init-personal-skills — set up org, workspace, branches and promotion repos for a project.

@@ -1,6 +1,6 @@
 ---
 name: init-personal-skills
-description: Set up the repo-* skills for a new project — ask for (and auto-detect via gh) the GitHub org, local workspace folder, release branch, main branch, promotion repos, the git hand-off rule (default on), the company's Slack channel ID, the optional unattended PR watcher, and git safety defaults plus a per-org commit email, then write them to the `## repo-* skills` section of the user-level ~/.claude/CLAUDE.md after confirmation. Invoke when the user says "/init-personal-skills", "set up the skills for a new project", "switch the repo skills to another org", or when another skill reports placeholder config values.
+description: Set up the repo-* skills for a new project — ask for (and auto-detect via gh) the GitHub org, local workspace folder, release branch, main branch, promotion repos, the git hand-off rule (default on), the company's Slack channel ID, the optional unattended PR watcher, and git safety defaults plus the org email (per-folder commit email), then write them to the `## repo-* skills` section of the user-level ~/.claude/CLAUDE.md after confirmation. Invoke when the user says "/init-personal-skills", "set up the skills for a new project", "switch the repo skills to another org", or when another skill reports placeholder config values.
 ---
 
 # Initialize the repo-* skills for a project
@@ -24,6 +24,7 @@ whenever the user moves to a different project.
 - Promotion repos: <repo>, <repo>
 - Git hand-off: on
 - Slack channel ID: <channel-id or empty>
+- Org email: <company email or empty>
 ```
 
 Only if the user opts into the unattended PR watcher (step 7), also:
@@ -45,6 +46,7 @@ Only if the user opts into the unattended PR watcher (step 7), also:
 | Promotion repos | repos running the release → main promotion; `repo-pr-approve` lists their open PRs into the main branch | detected, see step 4 |
 | Git hand-off | `on`: Claude never commits, pushes, creates branches/PRs or merges — it hands you the commands. `off`: Claude runs them itself, still asking before force-pushes, resets, direct pushes to shared branches and merges (`github-branch-hygiene`, `repo-code-review`, `repo-pr-review`) | `on` |
 | Slack channel ID | `tools/repo-pr-watcher` run summary; company-specific | none — always asked, empty allowed (= no summary) |
+| Org email | per-folder git commit email (step 8), `github-email-routing`; company-specific | none — always asked, empty allowed |
 | PR watcher window / timezone / interval / precheck / max skip | `tools/repo-pr-watcher` only | any time / system local / `30m` / `on` / `6h` |
 
 ## Steps
@@ -112,17 +114,23 @@ Only if the user opts into the unattended PR watcher (step 7), also:
    - If the global email looks like a company address, point out that
      every repo outside an org folder commits with it, and suggest a
      personal or GitHub noreply address as the global default.
-   - Ask whether repos under the local workspace should commit with a
-     company email. If yes, ask for it (company-specific: never suggest one)
-     and offer, with `<slug>` = the workspace folder name:
+   - Ask for the **Org email** — the user's address at this company, or
+     empty if there is none (company-specific: never suggest one; when the
+     org changed, don't reuse the previous section's value). It's written
+     as `- Org email:` in step 9 and also used by `github-email-routing`.
+   - If it's set, ask whether repos under the local workspace should commit
+     with it. If yes, offer, with `<slug>` = the workspace folder name:
      ```
-     git config --file ~/.gitconfig-<slug> user.email <company-email>
+     git config --file ~/.gitconfig-<slug> user.email <Org email>
      git config --global includeIf.gitdir:<workspace, absolute, ending in />.path ~/.gitconfig-<slug>
      ```
      Verify with `git -C <a repo in the workspace> config user.email`.
    Show each `git config` command and run it only after the user's OK.
    `tools/git-config/setup.sh` in this plugin's repo does the full global
    setup (identity, signing, aliases) if the user wants all of it.
+   If `Org email` is set and the org isn't the user's own account, mention
+   `/personal:github-email-routing` to send this org's GitHub notification
+   emails there instead of the personal inbox.
 9. **Confirm, then write.** Show the complete section exactly as it will be
    written and wait for the user's OK. Then:
    - file missing → create `~/.claude/CLAUDE.md` with just this section;

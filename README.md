@@ -34,6 +34,7 @@ The skills use placeholders instead of a hard-coded org, repos or branches:
 | `<promotion-repos>` | `api`, `ui` | Repos running the release → main promotion |
 | Git hand-off | `on` | `on`: Claude hands you git commands instead of running them. `off`: Claude runs them itself (see below) |
 | Slack channel ID | empty | Company-specific channel for automated run summaries; asked per project, never defaulted |
+| Org email | empty | Your address at the company: per-folder git commit email and GitHub email routing; asked per project, never defaulted |
 
 Run `/personal:init-personal-skills` once per project. It detects what it
 can with `gh`, asks you to confirm each value, and writes them to the
@@ -48,6 +49,7 @@ can with `gh`, asks you to confirm each value, and writes them to the
 - Promotion repos: api, ui
 - Git hand-off: on
 - Slack channel ID: C0123456789
+- Org email: you@my-company.com
 ```
 
 Real values live only in that file, never in this repo.
@@ -67,6 +69,7 @@ Real values live only in that file, never in this repo.
 | `repo-pr-review` | Status sweep of your own open PRs org-wide; request reviewers (asked per PR), draft fixes for unaddressed review comments |
 | `repo-pr-approve` | Deep review of PRs where you're a requested reviewer, including release → main promotion PRs: check out, run tests, tamper-test guardrails, verify PR-body claims; two-round verdict |
 | `repo-code-review` | Self-review loop right after `gh pr create`: Opus review-and-fix loop, then one independent Fable pass |
+| `github-email-routing` | Send one org's GitHub notification emails to the org address (GitHub Custom routing, or a Gmail filter + forward as fallback); checks and verifies read-only, never changes settings itself |
 | `gh-notifications` | Digest of unread GitHub notifications for the configured org: what needs you, activity on your work, FYI noise as counts; PR state checked, next skill suggested. Read-only unless you approve mark-read/unwatch |
 | `repo-pull` | Sync every repo under `~/workspace/<org>/` to `<release-branch>` (or default branch), stashing dirty trees and fast-forwarding submodules |
 | `init-personal-skills` | Set up the placeholders above for a new project and write them to `~/.claude/CLAUDE.md` |
