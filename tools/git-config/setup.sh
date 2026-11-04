@@ -99,7 +99,8 @@ set_cfg --global alias.last "log -1 HEAD"
 set_cfg --global alias.lg "log --graph --pretty=format:'%Cred%h%Creset %C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --date=relative"
 set_cfg --global alias.hist "log --pretty=format:'%h %ad | %s%d [%an]' --graph --date=short"
 # Shell alias, so the tag name is computed when you run it, not when this
-# script runs: release-<n>-<branch>-<sha>.
-set_cfg --global alias.release '!f() { n=$(git tag -l "release-*" | wc -l | tr -d " "); git tag -a "release-$n-$(git symbolic-ref --short HEAD)-$(git rev-parse HEAD)" "$@"; }; f'
+# script runs: release-<n>-<branch>-<sha>. Stops on a detached HEAD instead
+# of tagging with an empty branch name.
+set_cfg --global alias.release '!f() { b=$(git symbolic-ref --short HEAD) || return 1; n=$(git tag -l "release-*" | wc -l | tr -d " "); git tag -a "release-$n-$b-$(git rev-parse HEAD)" "$@"; }; f'
 
 echo "Done."
