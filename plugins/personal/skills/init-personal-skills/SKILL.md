@@ -1,6 +1,6 @@
 ---
 name: init-personal-skills
-description: Set up the repo-* skills for a new project — ask for (and auto-detect via gh) the GitHub org, local workspace folder, release branch, main branch, promotion repos, the git hand-off rule (default on), the company's Slack channel ID and the optional unattended PR watcher, then write them to the `## repo-* skills` section of the user-level ~/.claude/CLAUDE.md after confirmation. Invoke when the user says "/init-personal-skills", "set up the skills for a new project", "switch the repo skills to another org", or when another skill reports placeholder config values.
+description: Set up the repo-* skills for a new project — ask for (and auto-detect via gh) the GitHub org, local workspace folder, release branch, main branch, promotion repos, the git hand-off rule (default on), the company's Slack channel ID, the optional unattended PR watcher, and git safety defaults plus a per-org commit email, then write them to the `## repo-* skills` section of the user-level ~/.claude/CLAUDE.md after confirmation. Invoke when the user says "/init-personal-skills", "set up the skills for a new project", "switch the repo skills to another org", or when another skill reports placeholder config values.
 ---
 
 # Initialize the repo-* skills for a project
@@ -90,9 +90,35 @@ Only if the user opts into the unattended PR watcher (step 7), also:
    if the section has them). If yes, ask for the active window (e.g.
    `15:00-02:00`, empty = any time), its IANA timezone (empty = system
    local) and the interval (`10m`/`30m`/`1h`, default `30m`). Never run
-   its `install.sh` yourself — tell the user to run it after step 9, and
+   its `install.sh` yourself — tell the user to run it after step 10, and
    to rerun it whenever the interval changes.
-8. **Confirm, then write.** Show the complete section exactly as it will be
+8. **Git safety defaults and org identity.** Read-only check first:
+   ```
+   git config --global --get branch.autoSetupMerge   # want: false
+   git config --global --get push.autoSetupRemote    # want: true
+   git config --global --get user.email
+   git config --global --get-regexp '^includeif\.'
+   ```
+   - If either default is off, say why it matters (`autoSetupMerge=false`
+     stops `git checkout -b x origin/<release-branch>` from tracking the
+     shared branch — the root cause in `github-branch-hygiene`) and offer
+     to set it (`git config --global branch.autoSetupMerge false`,
+     `git config --global push.autoSetupRemote true`).
+   - If the global email looks like a company address, point out that
+     every repo outside an org folder commits with it, and suggest a
+     personal or GitHub noreply address as the global default.
+   - Ask whether repos under the local workspace should commit with a
+     company email. If yes, ask for it (company-specific: never suggest one)
+     and offer, with `<slug>` = the workspace folder name:
+     ```
+     git config --file ~/.gitconfig-<slug> user.email <company-email>
+     git config --global includeIf.gitdir:<workspace, absolute, ending in />.path ~/.gitconfig-<slug>
+     ```
+     Verify with `git -C <a repo in the workspace> config user.email`.
+   Show each `git config` command and run it only after the user's OK.
+   `tools/git-config/setup.sh` in this plugin's repo does the full global
+   setup (identity, signing, aliases) if the user wants all of it.
+9. **Confirm, then write.** Show the complete section exactly as it will be
    written and wait for the user's OK. Then:
    - file missing → create `~/.claude/CLAUDE.md` with just this section;
    - section present → replace it in place (from the `## repo-* skills`
@@ -100,16 +126,18 @@ Only if the user opts into the unattended PR watcher (step 7), also:
    - section absent → append it at the end, separated by a blank line.
    Never touch any other part of the file. Show the resulting section
    (`sed -n '/^## repo-\* skills/,/^## /p' ~/.claude/CLAUDE.md`) as proof.
-9. **Report** the values written and remind the user that a new Claude Code
+10. **Report** the values written and remind the user that a new Claude Code
    session picks them up (the current one already has the old CLAUDE.md
    loaded).
 
 ## Rules
 
-- Write only to `~/.claude/CLAUDE.md`. Never write real org, repo or branch
-  names into the plugin repo itself — that's the point of the placeholders.
+- Write only to `~/.claude/CLAUDE.md`, plus the `git config` commands of
+  step 8 (global git config and `~/.gitconfig-<slug>`), each run only after
+  the user's OK. Never write real org, repo or branch names into the plugin
+  repo itself — that's the point of the placeholders.
 - Every value is confirmed by the user; auto-detection only suggests.
-- Company-specific identifiers (org, Slack channel ID) are asked fresh for
+- Company-specific identifiers (org, Slack channel ID, company email) are asked fresh for
   each project — never defaulted, never carried over from another project.
 - Read-only `gh` calls only (`api` GETs, `repo list`); no repo, branch or
   settings changes.

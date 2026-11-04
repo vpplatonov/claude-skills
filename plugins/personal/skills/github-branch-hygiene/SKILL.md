@@ -78,6 +78,8 @@ When a commit lands directly on a shared branch (`<release-branch>`, `<main-bran
 
 `git checkout -b <new-branch> origin/<other-branch>` sets `<new-branch>`'s upstream to `origin/<other-branch>`, **not** a same-named remote branch. A later plain `git push` then lands on `<other-branch>` directly — e.g. creating a branch from `origin/<release-branch>` this way, then pushing, pushes straight to `<release-branch>`.
 
+Git can block this footgun itself: with `git config --global branch.autoSetupMerge false` a branch created from `origin/<other-branch>` gets no upstream at all, and `push.autoSetupRemote true` makes the first plain `git push` create a same-named remote branch. `/personal:init-personal-skills` checks both; `tools/git-config/setup.sh` sets them. Still follow the checklist above — the setting may be off on another machine.
+
 **Prevention:** always push a brand-new branch explicitly the first time — `git push -u origin <branch-name>` — regardless of how it was created. This sets correct tracking in one step and avoids the accident entirely. Stronger still, per the strict rule above: hand off the branch-creation command itself with `--no-track` so there's no upstream to silently inherit in the first place, rather than depending on the explicit-push step happening correctly later.
 
 ## Remediation: reset --hard + force-push (not revert)

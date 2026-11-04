@@ -37,6 +37,7 @@ Applied automatically, no need to invoke:
 - ticket-attachments-step-zero, jira-new-ticket-creation, torch-apple-silicon-mps
 
 Optional, not part of the plugin:
+- tools/git-config/setup.sh — one-time global git setup (identity, aliases, safety defaults); `--org-identity` gives a company folder its own commit email.
 - tools/repo-pr-watcher — runs repo-pr-approve on a schedule, unattended (posts without asking). Off until you run its install.sh.
 
 Built-in worth knowing:
