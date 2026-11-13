@@ -24,6 +24,7 @@ whenever the user moves to a different project.
 - Promotion repos: <repo>, <repo>
 - Git hand-off: on
 - Slack channel ID: <channel-id or empty>
+- GitHub-only repos: <repo>, <repo> or empty
 - Org email: <company email or empty>
 ```
 
@@ -43,9 +44,10 @@ Only if the user opts into the unattended PR watcher (step 7), also:
 | Local workspace | `repo-pull`, `git-local-excludes` | `~/workspace/<org, lowercased>/` |
 | Release branch | shared integration branch feature PRs merge into; `repo-pull` syncs to it | `release` |
 | Main branch | production branch; `<release-branch>` is promoted into it via a PR | `main` |
-| Promotion repos | repos running the release → main promotion; `repo-pr-approve` lists their open PRs into the main branch | detected, see step 4 |
+| Promotion repos | repos running the release → main promotion; `repo-pr-approve` lists their open PRs into the main branch. Empty = no promotion sweep (only review requests and PRs you commented on) | detected, see step 4 |
 | Git hand-off | `on`: Claude never commits, pushes, creates branches/PRs or merges — it hands you the commands. `off`: Claude runs them itself, still asking before force-pushes, resets, direct pushes to shared branches and merges (`github-branch-hygiene`, `repo-code-review`, `repo-pr-review`) | `on` |
 | Slack channel ID | `tools/repo-pr-watcher` run summary; company-specific | none — always asked, empty allowed (= no summary) |
+| GitHub-only repos | repos where review results go to GitHub only: `repo-pr-approve` and `tools/repo-pr-watcher` send the PR author no Slack DM | empty (= author DMs everywhere) |
 | Org email | per-folder git commit email (step 8), `github-email-routing`; company-specific | none — always asked, empty allowed |
 | PR watcher window / timezone / interval / precheck / max skip | `tools/repo-pr-watcher` only | any time / system local / `30m` / `on` / `6h` |
 
@@ -87,6 +89,9 @@ Only if the user opts into the unattended PR watcher (step 7), also:
    `C0123456789`. It is company-specific: never suggest one from memory,
    another project or the previous section's value when the org changed.
    Empty is a valid answer and means "post no summaries".
+   Then ask for **GitHub-only repos**: repos where the team talks only
+   through PR comments, change requests and approvals, so review results
+   get no Slack DM to the author. Empty (the default) means DMs everywhere.
 7. **Unattended PR watcher (optional, default no).** Ask whether the user
    wants `tools/repo-pr-watcher` (scheduled, fully unattended
    `repo-pr-approve` that posts approvals and comments with no

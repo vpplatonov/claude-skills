@@ -45,6 +45,7 @@ KEYS = {
     "PR watcher precheck": ("REPO_WATCHER_PRECHECK", "on"),   # off: always a full run
     "PR watcher max skip": ("REPO_WATCHER_MAX_SKIP", "6h"),   # longest gap between full runs
     "Slack channel ID": ("REPO_WATCHER_SLACK_CHANNEL", ""),  # empty: no run summary
+    "GitHub-only repos": ("REPO_WATCHER_GITHUB_ONLY", ""),   # empty: every repo gets author DMs
     "PR watcher window": ("REPO_WATCHER_WINDOW", ""),        # empty: any time
     "PR watcher timezone": ("REPO_WATCHER_TZ", ""),          # empty: system local time
     "PR watcher interval": ("REPO_WATCHER_INTERVAL", "30m"),
@@ -163,7 +164,19 @@ def precheck(cfg: dict[str, str], now: datetime) -> tuple[bool, str]:
     return False, f"no new {cfg['GitHub org']} activity since {last.isoformat()}"
 
 
-def automation_directive(workspace: Path, slack_channel: str) -> str:
+def github_only_repos(value: str) -> list[str]:
+    """Repo names from the comma-separated `GitHub-only repos` value."""
+    return [name.strip() for name in value.split(",") if name.strip()]
+
+
+def automation_directive(workspace: Path, slack_channel: str, github_only: list[str]) -> str:
+    if github_only:
+        no_dm = (
+            f" Exception — GitHub-only repos ({', '.join(github_only)}): send NO DM, no Slack message and no "
+            f"email to anyone about PRs in these repos; the GitHub comment or approval is the only notice."
+        )
+    else:
+        no_dm = ""
     if slack_channel:
         summary = (
             f"  2. Run summary: only if at least one PR got an action (approved and/or commented) this run, "
@@ -178,7 +191,7 @@ def automation_directive(workspace: Path, slack_channel: str) -> str:
 - Skip every "wait for the user's go-ahead" pause in the skill's instructions. Once the review protocol reaches a verdict for a PR (Round 1 finding, or Round 2 clean/finding), post it immediately (comment or approve) without asking.
 - Isolation: never check out a PR branch in the existing working directory at {workspace}/<repo>. Use `git worktree add {workspace}/<repo>/.review-worktrees/pr-<number> <branch-or-sha>` and do all checkout/testing/tamper-testing inside that worktree; remove it when done (`git worktree remove --force <path>`, plus any throwaway tracking branch). Never run `git checkout` or `git stash` in the primary working directory.
 - Slack, two independent sends:
-  1. Per-PR author DM (the skill's "Notify the requester in Slack" step): whenever a comment or approval actually posts to GitHub, send that PR's author their short DM as the skill describes, without confirmation. Skip it if the Slack connector is unavailable.
+  1. Per-PR author DM (the skill's "Notify the requester in Slack" step): whenever a comment or approval actually posts to GitHub, send that PR's author their short DM as the skill describes, without confirmation. Skip it if the Slack connector is unavailable.{no_dm}
 {summary}
 
 The skill's own "Concurrency lock" step (mkdir/rmdir on {LOCK_DIR}) is the real mutex against a manual run or another tick — follow it exactly, first thing, before step 1.
@@ -238,7 +251,8 @@ def main(argv: list[str]) -> None:
     try:
         result = subprocess.run(
             [claude, "-p", "--dangerously-skip-permissions",
-             "--append-system-prompt", automation_directive(workspace, cfg["Slack channel ID"]),
+             "--append-system-prompt",
+             automation_directive(workspace, cfg["Slack channel ID"], github_only_repos(cfg["GitHub-only repos"])),
              SKILL],
             cwd=workspace, capture_output=True, text=True, timeout=RUN_TIMEOUT_SECONDS,
         )

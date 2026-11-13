@@ -21,6 +21,7 @@ edit the `## repo-* skills` section of `~/.claude/CLAUDE.md` yourself:
 | `GitHub org` | — | Org whose notifications the pre-check looks at; empty = no pre-check |
 | `Local workspace` | — (required) | Folder the run starts in; repos are cloned under it |
 | `Slack channel ID` | empty | Company-specific channel for the run summary; empty = no summary |
+| `GitHub-only repos` | empty | Comma-separated repo names whose PR authors get no Slack DM; the GitHub post is the only notice. The run summary still lists them |
 | `PR watcher window` | empty = any time | Active hours, e.g. `15:00-02:00` (may wrap past midnight) |
 | `PR watcher timezone` | system local | IANA name for the window, e.g. `Europe/Berlin` |
 | `PR watcher interval` | `30m` | How often launchd fires: `10m`, `30m`, `1h`, `600s` |
@@ -30,9 +31,13 @@ edit the `## repo-* skills` section of `~/.claude/CLAUDE.md` yourself:
 Environment variables override the file: `REPO_WATCHER_ORG`,
 `REPO_WATCHER_WORKSPACE`, `REPO_WATCHER_SLACK_CHANNEL`, `REPO_WATCHER_WINDOW`,
 `REPO_WATCHER_TZ`, `REPO_WATCHER_INTERVAL`, `REPO_WATCHER_PRECHECK`,
-`REPO_WATCHER_MAX_SKIP`.
+`REPO_WATCHER_MAX_SKIP`, `REPO_WATCHER_GITHUB_ONLY`.
 
-Window, timezone, workspace and Slack channel are read fresh on every run.
+Which PRs a run reviews comes from the skill's own keys: an empty
+`Promotion repos` means no sweep of open PRs into the main branch — only
+review requests and PRs you already commented on.
+
+Window, timezone, workspace, Slack channel and GitHub-only repos are read fresh on every run.
 The interval is baked into the launchd job: rerun `install.sh` after
 changing it.
 

@@ -6,10 +6,12 @@ description: Deep-verify and review open PRs across org repos where you're a req
 # Reviewing other people's PRs (org repos)
 
 > **Config:** `your-org`, `~/workspace/<org>/`, `<release-branch>`,
-> `<main-branch>` and `<promotion-repos>` come from the `## repo-* skills`
-> section of `~/.claude/CLAUDE.md`. If that section is missing or still
-> holds placeholder values, stop and tell the user to run
-> `/personal:init-personal-skills` — never guess them.
+> `<main-branch>`, `<promotion-repos>` and `<github-only-repos>` come from the
+> `## repo-* skills` section of `~/.claude/CLAUDE.md`. If that section is
+> missing or still holds placeholder values, stop and tell the user to run
+> `/personal:init-personal-skills` — never guess them. `<promotion-repos>`
+> and `<github-only-repos>` may be empty: an empty value is a choice, not a
+> placeholder.
 
 The mirror image of `repo-pr-review`: that skill checks status on PRs *you*
 authored. This one is you acting as *reviewer* on someone else's PR — the
@@ -128,7 +130,9 @@ outcome determines whether a Round 2 (forced Opus 5.5) pass happens at all.
    <release-branch> → <main-branch> chain (`<promotion-repos>`), the real code review for that chain now
    happens on the <release-branch> → <main-branch> promotion PR itself, not just on the
    ungated branch → <release-branch> PRs. Always check for one, whether or not either
-   query above happened to catch it.
+   query above happened to catch it. **An empty `Promotion repos` value turns
+   this third source off**: skip it and enumerate from the two searches above
+   only.
 
    Extended 2026-10-01: list **every** open PR into `<main-branch>`, not just
    `head=<release-branch>`. Releases also promote per ticket from a feature or
@@ -421,6 +425,12 @@ outcome determines whether a Round 2 (forced Opus 5.5) pass happens at all.
 Whenever a comment or approval actually gets posted to GitHub (any point in
 step 9), also draft a short Slack DM to the PR author pointing them at it —
 don't make them notice the GitHub notification on their own.
+
+- **GitHub-only repos — no Slack at all.** If the PR's repo is listed in
+  `GitHub-only repos` (`<github-only-repos>`), skip this whole section for
+  that PR: no draft, no search, no DM, no email. The GitHub comment or
+  review is the only notice in those repos. Say "GitHub-only repo, no Slack
+  DM" in the report for that PR.
 
 - **Find the author's Slack account**: `slack_search_users` with the PR
   author's display name (from `gh pr view`'s `author` field — GitHub
