@@ -96,4 +96,6 @@ Never post, comment, approve, or change anything else.
   commits or posts) — titles can carry names and ticket keys.
 - `tools/repo-pr-watcher` runs the same org filter as a pre-check before
   each scheduled review, with `ACTIVE_REASONS` = the reasons from step 2
-  that can mean a PR needs a review. Change both together.
+  that can mean a PR needs a review from you — every "Needs you" reason
+  except `security_alert`, plus `comment`; not `author` (your own PRs
+  never get a review run). Change both together.

@@ -50,8 +50,11 @@ successful full run:
 ```
 gh api notifications --paginate -X GET -f all=true -f since=<last full run>
   keep: repo owner == <GitHub org>, reason in review_requested, mention,
-        team_mention, assign, author, comment
+        team_mention, assign, comment
 ```
+
+`author` (activity on your own PRs) is left out on purpose: `repo-pr-approve`
+always skips your own PRs, so it could only start runs that never act.
 
 - Something found → full `/personal:repo-pr-approve` run, as before.
 - Nothing found → the tick is skipped and logged (`no new <org> activity since …`).

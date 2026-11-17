@@ -67,6 +67,48 @@ def test_directive_names_github_only_repos():
     assert "Slack channel ID D000" in text
 
 
+@pytest.fixture
+def recent_run(tmp_path, monkeypatch):
+    """A last full run one hour ago, so the pre-check asks GitHub."""
+    now = watcher.datetime.now(watcher.timezone.utc)
+    state = tmp_path / "last-run"
+    state.write_text((now - watcher.timedelta(hours=1)).isoformat())
+    monkeypatch.setattr(watcher, "STATE_FILE", state)
+    return now
+
+
+def fake_gh(monkeypatch, lines: list[str]):
+    def run(*args, **kwargs):
+        return watcher.subprocess.CompletedProcess(args, 0, stdout="\n".join(lines) + "\n", stderr="")
+
+    monkeypatch.setattr(watcher.subprocess, "run", run)
+
+
+PRECHECK_CFG = {"PR watcher precheck": "on", "GitHub org": "example-org", "PR watcher max skip": "6h"}
+
+
+def test_author_only_activity_skips_the_run(recent_run, monkeypatch):
+    fake_gh(monkeypatch, ["example-org\tcore\tauthor", "example-org\tcore\tauthor"])
+    run, why = watcher.precheck(PRECHECK_CFG, recent_run)
+    assert run is False
+    assert "no new example-org activity" in why
+
+
+@pytest.mark.parametrize("reason", ["comment", "review_requested", "mention", "team_mention", "assign"])
+def test_active_reason_starts_the_run(recent_run, monkeypatch, reason):
+    fake_gh(monkeypatch, ["example-org\tcore\tauthor", f"example-org\tcore\t{reason}"])
+    run, why = watcher.precheck(PRECHECK_CFG, recent_run)
+    assert run is True
+    assert f"core#{reason}" in why
+    assert "core#author" not in why
+
+
+def test_other_org_activity_is_ignored(recent_run, monkeypatch):
+    fake_gh(monkeypatch, ["other-org\tcore\treview_requested"])
+    run, _ = watcher.precheck(PRECHECK_CFG, recent_run)
+    assert run is False
+
+
 def test_directive_without_github_only_repos_has_no_exception():
     text = watcher.automation_directive(Path("/ws"), "", [])
     assert "GitHub-only" not in text

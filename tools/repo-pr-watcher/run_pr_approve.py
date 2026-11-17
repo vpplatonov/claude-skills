@@ -36,7 +36,9 @@ SKILL = "/personal:repo-pr-approve"
 STATE_FILE = Path.home() / ".claude" / "repo-pr-watcher.last-run"
 # Notification reasons that can mean a PR needs (another) review from you.
 # A subset of the gh-notifications skill's "Needs you"/"Your work" buckets.
-ACTIVE_REASONS = {"review_requested", "mention", "team_mention", "assign", "author", "comment"}
+# No "author": that is activity on your own PRs, which repo-pr-approve always
+# skips, so it could only start runs that never act.
+ACTIVE_REASONS = {"review_requested", "mention", "team_mention", "assign", "comment"}
 
 # CLAUDE.md key -> (environment override, default)
 KEYS = {
