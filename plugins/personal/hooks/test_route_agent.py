@@ -147,6 +147,24 @@ def test_rewrite_keeps_every_other_field(hook: Hook) -> None:
     ("grep for TODOs", "haiku", None),                           # already on target
     ("[model-override] grep for TODOs", "opus", None),
     ("grep for TODOs", "claude-opus-5-5", "haiku"),              # full id normalised
+    ("Independent review of PR a/b#1. Concurrency guard in the worker", None, "opus"),
+    ("Security fix in token refresh.\nPlease review the diff fresh", "sonnet", "opus"),
+    ("Independent review of PR a/b#2. Copy fix in two templates", None, None),
+    ("Concurrency guard in the worker, run the suite", None, None),  # no review word
+    ("Review PR a/b#4 and summarize what the author changed", None, None),
+    ("Re-review: address review threads on the parser", None, None),
+    ("Review the performance section wording in README", None, None),
+    ("Review the OAuth token refresh change", None, "opus"),
+    ("Review the thread-safe cache rewrite", None, "opus"),
+    ("Review: workers now write concurrently to the cache", None, "opus"),
+    ("Review the mutex around the session map", None, "opus"),
+    ("Review the new encryption of stored tokens", None, "opus"),
+    ("Review the SQL injection fix in search", None, "opus"),
+    ("Review the lock around the job queue", None, "opus"),
+    ("Review the dependency bump in package-lock.json", None, None),
+    ("Review the Pipfile.lock and poetry.lock update", None, None),
+    ("Review the lock file refresh after the bump", None, None),
+    ("Review PR a/b#3: schema migration for orders", None, "fable"),  # large-change first
 ])
 def test_regex_routing(hook: Hook, prompt: str, model: str | None,
                        expected: str | None) -> None:

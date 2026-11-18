@@ -64,6 +64,27 @@ RULES = [
                    r"major refactor|large refactor|codebase-wide|deep research|"
                    r"quantitative analysis|scientific)\b",
     },
+    # A review of a risky change stays on opus when the classifier fails
+    # (both a review word and a risk area must appear, in any order).
+    {
+        "name": "risky-review",
+        "model": "opus",
+        "cheap": False,
+        # Whole words only: "author", "review threads" and a README's
+        # "performance" section must not count as risk areas.
+        # "lock" not after "-"/"." and not before ".json"/"file(s)", so a
+        # package-lock.json or "lock file" bump doesn't count.
+        # Global rule, raise-only: any Agent call naming a review and a risk
+        # area (even negated, "no auth changes") goes to opus when the
+        # classifier fails. Accepted cost.
+        "pattern": r"^(?=[\s\S]*\breview\w*)(?=[\s\S]*\b(concurren\w*|race conditions?|"
+                   r"races?|racy|(?<![-.])locks?(?!\.json|\s?files?)|locking|deadlocks?|mutex\w*|"
+                   r"thread[- ]safe\w*|threading|multi-?thread\w*|async|asyncio|"
+                   r"security|auth|authn|authz|authenticat\w*|authori[sz]\w*|oauth|jwt|"
+                   r"permissions?|credentials?|crypto\w*|(en|de)crypt\w*|injection|xss|csrf|"
+                   r"secrets?|schema|database|transactions?|cross-cutting|"
+                   r"performance[- ]critical|hot path)\b)",
+    },
     # The ui-* rules need a build/change word and skip Explore agents (see
     # BUILDS), so searching UI code still reaches search-read.
     {

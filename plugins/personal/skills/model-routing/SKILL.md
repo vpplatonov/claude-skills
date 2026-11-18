@@ -134,6 +134,7 @@ exits at once when it sees it, so the classifier can never recurse.
 | Keyword rule | Matches (description + prompt) | Model |
 |---|---|---|
 | `large-change` | migrate, migration, architecture, major refactor, codebase-wide, deep research, quantitative analysis | `fable` |
+| `risky-review` | a review word plus a risk area (whole words; repo and path names count too): concurrency/concurrent(ly), race(s)/race condition, lock(ing) (not `*-lock.json`, `*.lock`, lockfile or "lock file"), deadlock, mutex, thread-safe/threading/multi-thread, async/asyncio, security, auth/authn/authz/authentication/authorization, OAuth, JWT, permissions, credentials, crypto/encrypt/decrypt, injection, XSS, CSRF, secrets, schema, database, transactions, cross-cutting, performance-critical, hot path | `opus` |
 | `ui-system` | design system, component library, across all components/pages/screens, the whole/entire app or UI | `opus` |
 | `ui-from-design` | implement the design/mockup, from the mockup/design/Figma/wireframe/handoff, match the design, pixel-perfect | `sonnet` |
 | `scoped-code` | fix a bug, bug fix, implement the spec, write tests | `sonnet` |
