@@ -59,6 +59,17 @@ Only if the user opts into the unattended PR watcher (step 7), also:
    `## repo-* skills` section is there, show its current values — they are
    the defaults for every question below, unless they're still the
    placeholders (`your-org`, `<org>`, `api`, `ui`).
+   Then read the saved copy:
+   `python3 "<this skill's base directory>/../../hooks/repo_skills_config.py" show`
+   (the plugin's SessionStart hook saves the filled-in section to
+   `~/.claude/repo-skills-config.saved.md` at every session start, so it
+   survives a plugin update or a CLAUDE.md that got reset). Exit 1 means
+   there is none. If the current section is missing or still placeholders
+   and a saved copy exists, show it and use its values as the defaults
+   instead. If both exist and differ, show both and use the current one.
+   Saved company-specific values (Slack channel ID, GitHub-only repos, Org
+   email) are defaults only while the org the user confirms in step 2 is
+   the saved copy's org.
 2. **GitHub org.** Suggest candidates, don't pick one:
    - the owner of the current directory's `origin` remote, if any
      (`git remote get-url origin`);
@@ -150,18 +161,23 @@ Only if the user opts into the unattended PR watcher (step 7), also:
    - section absent → append it at the end, separated by a blank line.
    Never touch any other part of the file. Show the resulting section
    (`sed -n '/^## repo-\* skills/,/^## /p' ~/.claude/CLAUDE.md`) as proof.
+   Then refresh the saved copy right away, not at the next session start:
+   `python3 "<this skill's base directory>/../../hooks/repo_skills_config.py" save`.
 10. **Report** the values written and remind the user that a new Claude Code
    session picks them up (the current one already has the old CLAUDE.md
    loaded).
 
 ## Rules
 
-- Write only to `~/.claude/CLAUDE.md`, plus the `git config` commands of
+- Write only to `~/.claude/CLAUDE.md` (and its saved copy via the script's
+  `save`), plus the `git config` commands of
   step 8 (global git config and `~/.gitconfig-<slug>`), each run only after
   the user's OK. Never write real org, repo or branch names into the plugin
   repo itself — that's the point of the placeholders.
 - Every value is confirmed by the user; auto-detection only suggests.
 - Company-specific identifiers (org, Slack channel ID, company email) are asked fresh for
   each project — never defaulted, never carried over from another project.
+  The one exception is the saved copy of the *same* org's section (step 1),
+  restoring that project's own values after an update or reset.
 - Read-only `gh` calls only (`api` GETs, `repo list`); no repo, branch or
   settings changes.

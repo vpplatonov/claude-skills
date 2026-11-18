@@ -1,6 +1,18 @@
 {
-  "description": "Route Agent (subagent) calls to a model by task type; see skills/model-routing.",
+  "description": "Route Agent (subagent) calls to a model by task type (see skills/model-routing); save the repo-* skills config and suggest init-personal-skills after a plugin update.",
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/repo_skills_config.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Agent|Task",
