@@ -1,6 +1,6 @@
 ---
 name: repo-pr-approve
-description: Deep-verify and review open PRs across org repos where you're a requested reviewer (not the author) — checks out each branch, actually runs the test/lint suite, tamper-tests any claimed guardrails, cross-checks PR-body claims against measured reality. A finding in that first pass gets posted as a PR comment and stops there; a clean first pass gets exactly one more independent check forced onto Opus 5.5 before either approving (clean) or commenting and stopping (finding) — always with your go-ahead before anything posts. Invoke when the user asks to "review the PRs waiting on me", "check what I need to review", "/repo-pr-approve", or similar.
+description: Deep-verify and review open PRs across org repos where you're a requested reviewer (not the author) — checks out each branch, actually runs the test/lint suite, tamper-tests any claimed guardrails, cross-checks PR-body claims against measured reality. A finding in that first pass gets posted as a PR comment and stops there; a clean first pass gets exactly one more independent check, run as a fresh subagent on the model the model-routing classifier picks for that PR, before either approving (clean) or commenting and stopping (finding) — always with your go-ahead before anything posts. Invoke when the user asks to "review the PRs waiting on me", "check what I need to review", "/repo-pr-approve", or similar.
 ---
 
 # Reviewing other people's PRs (org repos)
@@ -109,7 +109,8 @@ they never run the review protocol at the same time:
 Step 2 is a dedup/inclusion gate that runs per PR before anything else.
 Steps 3-8 constitute **Round 1**. Step 9 is the two-round decision protocol
 that replaces any free-form verdict choice — see there for how Round 1's
-outcome determines whether a Round 2 (forced Opus 5.5) pass happens at all.
+outcome determines whether a Round 2 pass (a fresh subagent on the classifier's model) happens
+at all.
 
 1. **Enumerate PRs where review is requested from you, plus PRs where
    you've previously commented, plus every open PR into `<main-branch>` (the
@@ -378,11 +379,35 @@ outcome determines whether a Round 2 (forced Opus 5.5) pass happens at all.
      own; note them in the same comment, but they don't by themselves
      block Round 2.
    - **Round 1 is clear**: proceed to **Round 2** — exactly one more
-     independent pass, forced onto Opus 5.5 (`model: "opus"`) regardless of what
-     model ran Round 1 (spawn via `Agent` if the current session isn't
-     already Opus 5.5). Re-examine the diff at its current head fresh, not
-     just Round 1's notes — the point is a genuinely independent second
-     look before a formal approval goes out.
+     independent pass, always as a fresh `Agent` subagent (never in this
+     session's own context, so it doesn't inherit Round 1's reasoning).
+     Its model comes from the model-routing classifier, not from this
+     skill:
+     - **Leave `model` unset and don't put `[model-override]` in the
+       prompt.** The plugin's `PreToolUse` hook (`hooks/route_agent.py`)
+       asks Sonnet to classify the call and sets `model` for you (keyword
+       rules if Sonnet fails). A review is never cheap work, so it can't
+       land on haiku.
+     - **Make the call classifiable.** `description`: "Independent review
+       of PR <owner>/<repo>#<n>". The prompt opens with what the change
+       actually is — areas and kind of change (e.g. "schema migration in
+       the orders service", "copy fix in two templates",
+       "concurrency guard in the inference worker"), size (files, lines),
+       and risk signals Round 1 saw — so the classifier routes on the
+       PR's real difficulty. Then the brief: worktree path, head SHA,
+       the test/lint commands Round 1 ran, and "re-examine the diff at
+       its current head fresh, report findings with evidence; don't
+       edit, commit or post anything". Don't paste Round 1's verdict or
+       conclusions — the point is a genuinely independent second look.
+     - **Record the model.** The hook's note ("Model routing: this
+       subagent was sent to X …") says which model ran; with no note,
+       the subagent inherited this session's model. Put it in the report
+       to the user ("second check on Sonnet 5.5"), never in the GitHub
+       or Slack text.
+     - **If the routed model can't run** (e.g. a 429 or "needs usage
+       credits" for Fable), re-spawn once with `model: "opus"` and
+       `[model-override]` in the prompt, and tell the user it fell back.
+       That still counts as the one Round 2 pass, not a third round.
      - **Round 2 is also clear**: post the formal approval
        (`gh pr review <n> --approve --body-file`, confirmed with the user
        first).
@@ -503,7 +528,7 @@ protect and no state to restore, by construction, not by discipline. It
 also means a review can run in parallel with the user actively working in
 the main checkout without either interfering with the other.
 
-## Why exactly two rounds, forced Opus 5.5 for the second
+## Why exactly two rounds, with a classifier-picked model for the second
 
 A single pass risks a false-clear: whoever ran Round 1 — tests, tamper
 tests, live-verification and all — can still miss something a second,
@@ -513,9 +538,13 @@ second pass. Two rounds is the balance: Round 1 does the expensive,
 evidence-gathering work; if it already found something, a second pass adds
 nothing — hand the finding back immediately rather than spending another
 full pass to double-confirm a bug that's already confirmed. If Round 1
-came back clean, exactly one more independent pass — deliberately forced
-onto Opus 5.5, the more capable model, regardless of what ran Round 1 — is the
-one check worth paying for before an approval goes out under your name.
+came back clean, exactly one more independent pass — a fresh subagent with
+no Round 1 context — is the one check worth paying for before an approval
+goes out under your name. Its model is picked per PR by the model-routing
+classifier (changed 2026-11-18; it used to be forced onto Opus 5.5): a
+two-file copy fix doesn't need Opus, while a migration or concurrency
+change gets Opus or stronger, so the cost tracks the PR's real difficulty.
+Independence comes from the fresh context, not from a fixed model.
 Confirmed with the user (2026-08-20): no third round either way, and a
 Round 2 finding never gets auto-approved or bounced back to fix anything —
 this skill never edits code, so a finding always ends in a comment, never
