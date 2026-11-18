@@ -441,3 +441,46 @@ def test_contradictory_haiku_verdict_lets_regex_raise(sonnet: Hook, model: str |
     line = sonnet.last_log()
     assert (line["classifier"], line["classifier_status"]) == ("regex", "haiku-not-cheap")
     assert "task_type" not in line
+
+
+# --- UI / design routing (regex) ---------------------------------------------
+
+@pytest.mark.parametrize("prompt, model, stype, expected", [
+    # Built from a design: sonnet.
+    ("Implement the home page from the mockup in HTML and CSS", None, "general-purpose", "sonnet"),
+    # New UI that needs visual judgment: opus.
+    ("Build a new landing page with a responsive layout", "sonnet", "general-purpose", "opus"),
+    # A bug fix on a page stays scoped.
+    ("Fix the bug in the landing page header", "sonnet", "general-purpose", None),
+    # Raise-only: never lowers fable.
+    ("Redesign the home page", "fable", "general-purpose", None),
+    # Architecture still wins over UI.
+    ("Plan the architecture for the home page backend", "opus", "general-purpose", "fable"),
+    # A design spec alone doesn't mean sonnet: design-system rollout -> opus.
+    ("Implement the design system from the Figma handoff across all 40 components",
+     None, "general-purpose", "opus"),
+    ("Apply the handoff across every screen of the whole app", "sonnet", "general-purpose", "opus"),
+    # "redesign" outside UI is not UI work.
+    ("Redesign the database schema for orders", "sonnet", "general-purpose", None),
+    ("Redesign the checkout page", "sonnet", "general-purpose", "opus"),
+    # Searching UI code stays cheap: Explore agents skip the ui-* rules ...
+    ("Find the landing page component and list its props", "haiku", "Explore", None),
+    ("Find all HTML and CSS files under web/", "haiku", "Explore", None),
+    ("Locate the mockup PNGs in the repo", None, "Explore", "haiku"),
+    # ... and so does any task without a build/change word.
+    ("Find the landing page component and list its props", "opus", "general-purpose", None),
+    ("Summarize the page layout docs", "opus", "general-purpose", "haiku"),
+    ("Fix the HTML and CSS lint errors", "opus", "general-purpose", None),
+])
+def test_ui_routing(hook: Hook, prompt: str, model: str | None, stype: str,
+                    expected: str | None) -> None:
+    _, out = hook(agent(prompt, model, stype))
+    assert routed(out) == expected
+
+
+@pytest.mark.parametrize("task_type, model", [("ui-from-design", "sonnet"), ("ui-visual", "opus")])
+def test_sonnet_ui_task_types_accepted(sonnet: Hook, task_type: str, model: str) -> None:
+    _, out = sonnet(agent("Build the pricing page", "haiku"),
+                    FAKE_RESULT=verdict(model, task_type))
+    assert routed(out) == model
+    assert sonnet.last_log()["task_type"] == task_type

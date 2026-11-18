@@ -88,7 +88,7 @@ Real values live only in that file, never in this repo.
 
 | Skill | What it does |
 |---|---|
-| `model-routing` | Pick the model and effort for a task from a routing table (Haiku for search/logs, Sonnet for scoped coding, Opus by default, Fable for migrations and deep research), then run it as a subagent with a self-contained brief; escalation ladder: verify → raise effort → move up a model |
+| `model-routing` | Pick the model and effort for a task from a routing table (Haiku for search/logs, Sonnet for scoped coding, Opus by default, Fable for migrations and deep research; UI from a design on Sonnet, new UI or a design system on Opus, page design itself in Claude Design), then run it as a subagent with a self-contained brief; escalation ladder: verify → raise effort → move up a model |
 
 ### Working rules (applied by default)
 
