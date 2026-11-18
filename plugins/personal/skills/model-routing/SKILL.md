@@ -93,13 +93,16 @@ characters of the prompt, and gets back
 `{task_type, model, effort, read_only, confidence, why}`. The prompt encodes
 this table and its judgment rules: unsure means `opus`/`medium`, `haiku`
 only for read-only work where mistakes are cheap, a clear spec alone
-doesn't mean `sonnet`, and when two rows fit it takes the stronger one. A
-call takes about 5 seconds and a fraction of a cent.
+doesn't mean `sonnet`, and when two rows fit it takes the stronger one.
+Each Agent call waits for the classifier: about 5 seconds in testing, at
+most the timeout. Its free-text reason is never passed on, and a task type
+outside the table is logged as `other`.
 
 It falls back to the keyword rules below when the `claude` CLI is
 missing, the call fails or takes longer than 20 seconds
-(`MODEL_ROUTING_CLASSIFIER_TIMEOUT`), the reply isn't valid JSON, or
-confidence is below 0.6. `MODEL_ROUTING_CLASSIFIER=regex` skips Sonnet
+(`MODEL_ROUTING_CLASSIFIER_TIMEOUT`, capped at 25), the reply isn't valid
+JSON, confidence is below 0.6, or the verdict is `haiku` for work that
+isn't cheap. `MODEL_ROUTING_CLASSIFIER=regex` skips Sonnet
 entirely. The nested run sets `MODEL_ROUTING_CLASSIFYING=1`, and the hook
 exits at once when it sees it, so the classifier can never recurse.
 
@@ -114,19 +117,30 @@ exits at once when it sees it, so the classifier can never recurse.
   It raises a model the caller chose but never lowers it, except to
   `haiku` for cheap work: the `search-read` keyword rule, or a Sonnet
   verdict of `search-read`/`classification` with `read_only: true` and no
-  edit/fix/review keyword in the task.
+  edit or judgment word anywhere in the task (fix, edit, modify,
+  implement, refactor, patch, debug, review, decide, design, delete,
+  remove, rename, create, add, write/rewrite/overwrite, commit, push,
+  merge, move, install, deploy, post, apply, replace, "change/update the
+  …"; most in any inflection). This applies even when no model was
+  requested: haiku is never picked for non-cheap work.
 - No keyword match (regex fallback) → the call goes through unchanged.
 - `[model-override]` anywhere in the prompt → the hook leaves the call
   alone and doesn't call Sonnet. Use it when you picked the model on purpose.
-- The hook never changes `effort`; it logs Sonnet's suggestion and tells
-  the main session the reason.
+- The hook never changes `effort`. Sonnet's effort suggestion goes to the
+  log only; the main session is told the new model and the rule name.
+- A Sonnet verdict of `haiku` that fails the cheap checks contradicts the
+  prompt's own rules, so it is discarded (`classifier_status:
+  haiku-not-cheap`) and the keyword rules decide instead.
 - Mode, from `- Model routing:` in the `## repo-* skills` section of
   `~/.claude/CLAUDE.md` (or the `MODEL_ROUTING_MODE` env var, which wins):
   - `rewrite` (default) — changes `model` in place and tells the main
     session what it did. The result is valid; don't retry on another
     model.
   - `deny` — blocks the call with "retry with model: X"; the main session
-    retries with that model.
+    retries with that model. Only raises are denied: a verdict that would
+    *lower* the requested model (or pick `haiku` when none was requested),
+    from either classifier, lets the call through unchanged, since a retry
+    is classified again and could flip back.
   - `off` — the hook does nothing.
 - Each decision is logged as one line in `~/.claude/model-routing.log`:
   mode, requested and routed model, reason, `classifier` (`sonnet` or
