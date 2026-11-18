@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """PreToolUse hook for the Agent (Task) tool: route subagents to a model.
 
-Reads the hook input on stdin, classifies the subagent task with the
-keyword rules below, and when a rule picks a different model than the one
-requested it either rewrites the call (``rewrite``) or denies it with a
-"retry with model X" reason (``deny``). Mode comes from ``MODEL_ROUTING_MODE``
+Reads the hook input on stdin and classifies the subagent task: first with
+Sonnet (``claude -p --model sonnet``, prompt in ``classify_prompt.md``),
+then, on timeout, error, bad JSON or low confidence, with the keyword rules
+below. When the result picks a different model than the one requested it
+either rewrites the call (``rewrite``) or denies it with a "retry with
+model X" reason (``deny``). ``MODEL_ROUTING_CLASSIFIER=regex`` skips Sonnet. Mode comes from ``MODEL_ROUTING_MODE``
 or ``- Model routing: <mode>`` in the ``## repo-* skills`` section of
 ``~/.claude/CLAUDE.md``; default ``rewrite``. ``off`` disables it.
 
@@ -16,7 +18,10 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 import time
 
 OVERRIDE = "[model-override]"
@@ -24,6 +29,17 @@ MODES = ("rewrite", "deny", "off")
 TIER = {"haiku": 0, "sonnet": 1, "opus": 2, "fable": 3}
 CLAUDE_MD = os.path.expanduser("~/.claude/CLAUDE.md")
 LOG = os.path.expanduser("~/.claude/model-routing.log")
+HERE = os.path.dirname(os.path.abspath(__file__))
+PROMPT_FILE = os.path.join(HERE, "classify_prompt.md")
+# Set in the nested `claude -p` run so its own hooks (if any) exit at once.
+GUARD = "MODEL_ROUTING_CLASSIFYING"
+EFFORTS = ("low", "medium", "high")
+MIN_CONFIDENCE = 0.6
+PROMPT_CHARS = 4000
+# Keep below the hooks.json timeout (30 s) so the regex fallback still runs.
+DEFAULT_TIMEOUT = 20.0
+# Task types the classifier may use to lower an explicitly requested model.
+CHEAP_TYPES = ("search-read", "classification")
 
 # First match wins. "cheap" rules may lower an explicitly requested model;
 # every other rule only raises it (or fills it in when none was given).
@@ -89,7 +105,7 @@ def get_mode() -> str:
     return mode if mode in MODES else "rewrite"
 
 
-def classify(ti: dict) -> dict | None:
+def regex_classify(ti: dict) -> dict | None:
     text = " ".join(str(ti.get(k) or "") for k in ("description", "prompt"))
     stype = str(ti.get("subagent_type") or "").lower()
     for rule in RULES:
@@ -102,20 +118,131 @@ def classify(ti: dict) -> dict | None:
     return None
 
 
-def decide(ti: dict) -> tuple[str | None, str]:
-    """Return (target model or None for no change, reason)."""
+def classifier_timeout() -> float:
+    try:
+        return float(os.environ.get("MODEL_ROUTING_CLASSIFIER_TIMEOUT") or DEFAULT_TIMEOUT)
+    except ValueError:
+        return DEFAULT_TIMEOUT
+
+
+def parse_verdict(raw: str) -> dict | None:
+    """Validate the classifier's JSON reply; None if anything is off."""
+    raw = raw.strip()
+    if raw.startswith("```"):  # tolerate a stray code fence
+        raw = raw.strip("`")
+        raw = raw[raw.find("{"):]
+    start, end = raw.find("{"), raw.rfind("}")
+    if start < 0 or end < start:
+        return None
+    try:
+        v = json.loads(raw[start:end + 1])
+    except ValueError:
+        return None
+    if not isinstance(v, dict):
+        return None
+    model = norm_model(v.get("model"))
+    effort = str(v.get("effort") or "medium").lower()
+    conf = v.get("confidence")
+    if model is None or effort not in EFFORTS or isinstance(conf, bool) \
+            or not isinstance(conf, (int, float)) or not 0 <= conf <= 1:
+        return None
+    return {
+        "task_type": str(v.get("task_type") or "unknown")[:40],
+        "model": model,
+        "effort": effort,
+        "read_only": v.get("read_only") is True,
+        "confidence": float(conf),
+        "why": str(v.get("why") or "")[:200],
+    }
+
+
+def llm_classify(ti: dict) -> tuple[dict | None, str]:
+    """Ask Sonnet for a verdict. Returns (verdict or None, status)."""
+    exe = shutil.which("claude")
+    if exe is None:
+        return None, "no-cli"
+    try:
+        with open(PROMPT_FILE, encoding="utf-8") as fh:
+            system = fh.read()
+    except OSError:
+        return None, "no-prompt"
+    task = json.dumps({
+        "subagent_type": ti.get("subagent_type"),
+        "description": str(ti.get("description") or "")[:200],
+        "requested_model": ti.get("model"),
+        "prompt": str(ti.get("prompt") or "")[:PROMPT_CHARS],
+    })
+    env = dict(os.environ)
+    env[GUARD] = "1"
+    cmd = [exe, "-p", "--model", "sonnet", "--effort", "low",
+           "--output-format", "json", "--tools", "", "--strict-mcp-config",
+           "--setting-sources", "", "--no-session-persistence",
+           "--system-prompt", system]
+    try:
+        p = subprocess.run(cmd, input=task, env=env, cwd=tempfile.gettempdir(),
+                           capture_output=True, text=True,
+                           timeout=classifier_timeout())
+    except subprocess.TimeoutExpired:
+        return None, "timeout"
+    except OSError:
+        return None, "exec-error"
+    if p.returncode != 0:
+        return None, "exit-{}".format(p.returncode)
+    try:
+        envelope = json.loads(p.stdout)
+    except ValueError:
+        return None, "bad-envelope"
+    if not isinstance(envelope, dict) or envelope.get("is_error"):
+        return None, "cli-error"
+    verdict = parse_verdict(str(envelope.get("result") or ""))
+    if verdict is None:
+        return None, "bad-json"
+    if verdict["confidence"] < MIN_CONFIDENCE:
+        return None, "low-confidence"
+    return verdict, "ok"
+
+
+def task_text(ti: dict) -> str:
+    return " ".join(str(ti.get(k) or "") for k in ("description", "prompt"))
+
+
+def decide(ti: dict, info: dict | None = None) -> tuple[str | None, str]:
+    """Return (target model or None for no change, reason).
+
+    ``info`` (if given) is filled with classifier details for the log.
+    """
+    info = {} if info is None else info
     if OVERRIDE in str(ti.get("prompt") or ""):
         return None, "override"
-    rule = classify(ti)
-    if rule is None:
-        return None, "no-rule"
-    want = rule["model"]
+    want = name = None
+    cheap = False
+    if (os.environ.get("MODEL_ROUTING_CLASSIFIER") or "sonnet").lower() != "regex":
+        t0 = time.monotonic()
+        verdict, status = llm_classify(ti)
+        info["classifier_ms"] = int((time.monotonic() - t0) * 1000)
+        info["classifier_status"] = status
+        if verdict is not None:
+            info.update(classifier="sonnet", effort=verdict["effort"],
+                        confidence=verdict["confidence"], task_type=verdict["task_type"])
+            info["classifier_why"] = verdict["why"]
+            want, name = verdict["model"], "sonnet:" + verdict["task_type"]
+            # Lowering a chosen model is allowed only for cheap, read-only
+            # work, double-checked by the keyword guard.
+            cheap = (want == "haiku" and verdict["read_only"]
+                     and verdict["task_type"] in CHEAP_TYPES
+                     and not NOT_CHEAP.search(task_text(ti)))
+    if want is None:
+        info["classifier"] = "regex"
+        rule = regex_classify(ti)
+        if rule is None:
+            return None, "no-rule"
+        want, name, cheap = rule["model"], rule["name"], rule["cheap"]
     have = norm_model(ti.get("model"))
     if have == want:
-        return None, "already:" + rule["name"]
-    if have is not None and TIER[want] < TIER[have] and not rule["cheap"]:
-        return None, "keep-explicit:" + rule["name"]
-    return want, rule["name"]
+        return None, "already:" + name
+    if have is not None and TIER[want] < TIER[have] and not cheap:
+        return None, "keep-explicit:" + name
+    return want, name
 
 
 def log(entry: dict) -> None:
@@ -127,6 +254,8 @@ def log(entry: dict) -> None:
 
 
 def main() -> None:
+    if os.environ.get(GUARD):  # nested classifier run: never recurse
+        return
     data = json.load(sys.stdin)
     if not isinstance(data, dict) or data.get("tool_name") not in ("Agent", "Task"):
         return
@@ -136,7 +265,9 @@ def main() -> None:
     mode = get_mode()
     if mode == "off":
         return
-    target, why = decide(ti)
+    info: dict = {}
+    target, why = decide(ti, info)
+    note = info.pop("classifier_why", "")
     log({
         "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "mode": mode,
@@ -144,6 +275,7 @@ def main() -> None:
         "requested": ti.get("model"),
         "routed": target,
         "why": why,
+        **info,
         "description": str(ti.get("description") or "")[:80],
     })
     if target is None:
@@ -166,10 +298,11 @@ def main() -> None:
             "permissionDecisionReason": "Model routing: {} -> {}".format(why, target),
             "updatedInput": new,
             "additionalContext": (
-                "Model routing: this subagent was sent to {} instead of {} (rule: {}). "
+                "Model routing: this subagent was sent to {} instead of {} (rule: {}{}). "
                 "Its result is valid; don't retry on another model. To force a model, "
                 "put [model-override] in the prompt.".format(
-                    target, ti.get("model") or "the default", why)),
+                    target, ti.get("model") or "the default", why,
+                    "; " + note if note else "")),
         }}
     sys.stdout.write(json.dumps(out))
 

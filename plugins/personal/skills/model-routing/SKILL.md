@@ -82,21 +82,44 @@ start, before history builds up) over burying the lead one level down.
 ## The routing hook
 
 The plugin ships a `PreToolUse` hook on the Agent tool
-(`hooks/route_agent.py`) that applies a keyword version of this table to
-every subagent call, whether or not this skill is running:
+(`hooks/route_agent.py`) that applies this table to every subagent call,
+whether or not this skill is running.
 
-| Rule | Matches (description + prompt) | Model |
+**Classification.** The hook asks Sonnet first: it runs
+`claude -p --model sonnet --effort low` with no tools, no MCP servers and
+no settings, using the prompt in `hooks/classify_prompt.md`. It sends the
+`subagent_type`, the description, the requested model and the first 4,000
+characters of the prompt, and gets back
+`{task_type, model, effort, read_only, confidence, why}`. The prompt encodes
+this table and its judgment rules: unsure means `opus`/`medium`, `haiku`
+only for read-only work where mistakes are cheap, a clear spec alone
+doesn't mean `sonnet`, and when two rows fit it takes the stronger one. A
+call takes about 5 seconds and a fraction of a cent.
+
+It falls back to the keyword rules below when the `claude` CLI is
+missing, the call fails or takes longer than 20 seconds
+(`MODEL_ROUTING_CLASSIFIER_TIMEOUT`), the reply isn't valid JSON, or
+confidence is below 0.6. `MODEL_ROUTING_CLASSIFIER=regex` skips Sonnet
+entirely. The nested run sets `MODEL_ROUTING_CLASSIFYING=1`, and the hook
+exits at once when it sees it, so the classifier can never recurse.
+
+| Keyword rule | Matches (description + prompt) | Model |
 |---|---|---|
 | `large-change` | migrate, migration, architecture, major refactor, codebase-wide, deep research, quantitative analysis | `fable` |
 | `scoped-code` | fix a bug, bug fix, implement the spec, write tests | `sonnet` |
 | `search-read` | `Explore` agents; search, grep, find files, read logs, summarize, run tests, classify, extract — unless the task also edits, fixes, reviews or designs | `haiku` |
 
-- It only changes the call when a rule matches and picks a different
-  model. It raises a model the caller chose but never lowers it — except
-  the `search-read` rule, where mistakes are cheap.
-- No rule match → the call goes through unchanged.
+**Policy**, the same for either classifier:
+- It only changes the call when the classifier picks a different model.
+  It raises a model the caller chose but never lowers it, except to
+  `haiku` for cheap work: the `search-read` keyword rule, or a Sonnet
+  verdict of `search-read`/`classification` with `read_only: true` and no
+  edit/fix/review keyword in the task.
+- No keyword match (regex fallback) → the call goes through unchanged.
 - `[model-override]` anywhere in the prompt → the hook leaves the call
-  alone. Use it when you picked the model on purpose.
+  alone and doesn't call Sonnet. Use it when you picked the model on purpose.
+- The hook never changes `effort`; it logs Sonnet's suggestion and tells
+  the main session the reason.
 - Mode, from `- Model routing:` in the `## repo-* skills` section of
   `~/.claude/CLAUDE.md` (or the `MODEL_ROUTING_MODE` env var, which wins):
   - `rewrite` (default) — changes `model` in place and tells the main
@@ -105,8 +128,10 @@ every subagent call, whether or not this skill is running:
   - `deny` — blocks the call with "retry with model: X"; the main session
     retries with that model.
   - `off` — the hook does nothing.
-- Each decision is logged as one line in `~/.claude/model-routing.log`
-  (description's first 80 characters only, never the prompt).
+- Each decision is logged as one line in `~/.claude/model-routing.log`:
+  mode, requested and routed model, reason, `classifier` (`sonnet` or
+  `regex`), its status and latency, and Sonnet's task type, effort and
+  confidence. Only the description's first 80 characters, never the prompt.
 - Any hook error lets the call through unchanged.
 
 ## Rules

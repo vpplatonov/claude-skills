@@ -119,12 +119,13 @@ The plugin ships one hook, active as soon as the plugin is installed:
 
 | Hook | What it does |
 |---|---|
-| `PreToolUse` on `Agent` → [`hooks/route_agent.py`](plugins/personal/hooks/route_agent.py) | Applies the `model-routing` table to every subagent call by keyword. Raises a model you chose but never lowers it, except for search/log/summary work; no rule match = no change. `[model-override]` in the prompt bypasses it. Logs one line per decision to `~/.claude/model-routing.log` (no prompt text). Any error lets the call through unchanged. Python 3.9+, stdlib only |
+| `PreToolUse` on `Agent` → [`hooks/route_agent.py`](plugins/personal/hooks/route_agent.py) | Applies the `model-routing` table to every subagent call. Sonnet classifies the task (`claude -p --model sonnet`, prompt in [`hooks/classify_prompt.md`](plugins/personal/hooks/classify_prompt.md), about 5 s per call); on timeout, error, bad JSON or confidence below 0.6 it falls back to keyword rules. Raises a model you chose but never lowers it, except for search/log/summary work; no rule match = no change. `[model-override]` in the prompt bypasses it. Logs one line per decision to `~/.claude/model-routing.log` (no prompt text). Any error lets the call through unchanged. Python 3.9+, stdlib only |
 
 Turn it off with `- Model routing: off` in the `## repo-* skills` section
 (or `MODEL_ROUTING_MODE=off`, which wins over the file); `deny` blocks
 the call and lets Claude retry with the routed model instead of
-rewriting it. Tests: `python3 -m unittest plugins/personal/hooks/test_route_agent.py`.
+rewriting it. `MODEL_ROUTING_CLASSIFIER=regex` skips the Sonnet call and
+uses only the keyword rules. Tests: `python3 -m unittest plugins/personal/hooks/test_route_agent.py`.
 
 ## Ground rules baked into every skill
 
