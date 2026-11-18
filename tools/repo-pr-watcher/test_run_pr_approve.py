@@ -113,3 +113,17 @@ def test_directive_without_github_only_repos_has_no_exception():
     text = watcher.automation_directive(Path("/ws"), "", [])
     assert "GitHub-only" not in text
     assert "send no summary message anywhere" in text
+
+
+def test_section_ends_at_level_one_heading(tmp_path, monkeypatch):
+    path = tmp_path / "CLAUDE.md"
+    path.write_text("## repo-* skills\n- GitHub org: acme\n\n# Notes\n- GitHub-only repos: leaked\n")
+    monkeypatch.setattr(watcher, "CLAUDE_MD", path)
+    assert "GitHub-only repos" not in watcher.read_section()
+
+
+def test_section_read_through_utf8_bom(tmp_path, monkeypatch):
+    path = tmp_path / "CLAUDE.md"
+    path.write_bytes(b"\xef\xbb\xbf## repo-* skills\n- GitHub org: acme\n")
+    monkeypatch.setattr(watcher, "CLAUDE_MD", path)
+    assert watcher.read_section().get("GitHub org") == "acme"
