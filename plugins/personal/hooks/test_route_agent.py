@@ -502,3 +502,15 @@ def test_sonnet_ui_task_types_accepted(sonnet: Hook, task_type: str, model: str)
                     FAKE_RESULT=verdict(model, task_type))
     assert routed(out) == model
     assert sonnet.last_log()["task_type"] == task_type
+
+
+def test_mode_section_ends_at_level_one_heading(hook: Hook) -> None:
+    md = "## repo-* skills\n- GitHub org: x\n\n# Notes\n- Model routing: off\n"
+    _, out = hook(agent("Plan the database migration", "sonnet"), mode=None, claude_md=md,
+                  MODEL_ROUTING_CLASSIFIER="regex")
+    assert out is not None  # "off" is outside the section, so routing still runs
+
+
+def test_mode_read_through_utf8_bom(hook: Hook) -> None:
+    md = "\ufeff## repo-* skills\n- Model routing: off\n"
+    assert hook(agent("grep for TODOs", "opus"), claude_md=md)[1] is None

@@ -168,11 +168,12 @@ def norm_model(value: object) -> str | None:
 
 def mode_from_claude_md() -> str | None:
     try:
-        with open(CLAUDE_MD, encoding="utf-8") as fh:
+        with open(CLAUDE_MD, encoding="utf-8-sig") as fh:  # -sig: tolerate a BOM
             text = fh.read()
-    except OSError:
+    except (OSError, ValueError):
         return None
-    m = re.search(r"^## repo-\* skills\s*$(.*?)(?=^## |\Z)", text, re.M | re.S)
+    # Same boundary as repo_skills_config.py and the init skill: next # or ## heading.
+    m = re.search(r"^## repo-\* skills\s*$(.*?)(?=^#{1,2} |\Z)", text, re.M | re.S)
     if not m:
         return None
     k = re.search(r"^\s*-\s*Model routing:\s*(\S+)", m.group(1), re.M | re.I)
