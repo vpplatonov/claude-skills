@@ -125,7 +125,7 @@ Turn it off with `- Model routing: off` in the `## repo-* skills` section
 (or `MODEL_ROUTING_MODE=off`, which wins over the file); `deny` blocks
 the call and lets Claude retry with the routed model instead of
 rewriting it. `MODEL_ROUTING_CLASSIFIER=regex` skips the Sonnet call and
-uses only the keyword rules. Tests: `python3 -m unittest plugins/personal/hooks/test_route_agent.py`.
+uses only the keyword rules. Tests: `pytest plugins/personal/hooks` (hermetic: a fake `claude` CLI stands in for Sonnet).
 
 ## Ground rules baked into every skill
 
