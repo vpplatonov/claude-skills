@@ -119,7 +119,7 @@ def test_section_ends_at_level_one_heading(tmp_path, monkeypatch):
     path = tmp_path / "CLAUDE.md"
     path.write_text("## repo-* skills\n- GitHub org: acme\n\n# Notes\n- GitHub-only repos: leaked\n")
     monkeypatch.setattr(watcher, "CLAUDE_MD", path)
-    assert "GitHub-only repos" not in watcher.read_section()
+    assert watcher.read_section() == {"GitHub org": "acme"}
 
 
 def test_section_read_through_utf8_bom(tmp_path, monkeypatch):

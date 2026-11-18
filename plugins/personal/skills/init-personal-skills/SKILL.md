@@ -164,7 +164,8 @@ Only if the user opts into the unattended PR watcher (step 7), also:
    Then refresh the saved copy right away, not at the next session start:
    `python3 "<this skill's base directory>/../../hooks/repo_skills_config.py" save`.
    Exit 1 means the written section isn't readable as filled in (or
-   CLAUDE.md couldn't be read as UTF-8): recheck
+   CLAUDE.md couldn't be read as UTF-8, or the heading isn't exactly
+   `## repo-* skills`): recheck
    that GitHub org is a real org (not empty or `your-org`) and that neither
    it nor Local workspace holds a `<…>` placeholder. Exit 2 means the backup
    copy couldn't be written, so tell the user (CLAUDE.md itself was still

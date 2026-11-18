@@ -505,10 +505,17 @@ def test_sonnet_ui_task_types_accepted(sonnet: Hook, task_type: str, model: str)
 
 
 def test_mode_section_ends_at_level_one_heading(hook: Hook) -> None:
+    call = agent("Plan the database migration", "sonnet")
+    _, baseline = hook(call, claude_md="")
+    assert routed(baseline) is not None
     md = "## repo-* skills\n- GitHub org: x\n\n# Notes\n- Model routing: off\n"
-    _, out = hook(agent("Plan the database migration", "sonnet"), mode=None, claude_md=md,
-                  MODEL_ROUTING_CLASSIFIER="regex")
-    assert out is not None  # "off" is outside the section, so routing still runs
+    _, out = hook(call, claude_md=md)
+    assert routed(out) == routed(baseline)  # "off" is outside the section: ignored
+
+
+def test_mode_after_blank_line_inside_section_is_read(hook: Hook) -> None:
+    md = "## repo-* skills\n- GitHub org: x\n\n- Model routing: off\n\n# Notes\n"
+    assert hook(agent("Plan the database migration", "sonnet"), claude_md=md)[1] is None
 
 
 def test_mode_read_through_utf8_bom(hook: Hook) -> None:

@@ -17,7 +17,7 @@
   /plugin marketplace add vpplatonov/claude-skills
   /plugin install personal@vpplatonov-skills
   ```
-  Update later with `/plugin marketplace update vpplatonov-skills`; the next fresh session (a new launch, not `--resume` or `/clear`) then suggests rerunning `/personal:init-personal-skills` with your saved values as defaults (starting with the update after the one that adds this hook).
+  Update later with `/plugin marketplace update vpplatonov-skills`; the next fresh session (a new launch, not `--resume` or `/clear`) then suggests rerunning `/personal:init-personal-skills` with your saved values as defaults if a saved copy exists (starting with the update after the one that adds this hook).
 
 ### Set up your project
 - [ ] Run `/personal:init-personal-skills`. It asks for your GitHub org, workspace folder, release branch (default `release`), main branch (default `main`), promotion repos, the git hand-off rule (default `on`), the subagent model-routing mode (default `rewrite`), your company's Slack channel ID and org email (both optional), suggests what it can detect with `gh`, and writes them to the `## repo-* skills` section of `~/.claude/CLAUDE.md` after your OK. Rerun it when you switch projects.
