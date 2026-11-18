@@ -61,10 +61,10 @@ Only if the user opts into the unattended PR watcher (step 7), also:
    placeholders (`your-org`, `<org>`, `api`, `ui`).
    Then read the saved copy:
    `python3 "<this skill's base directory>/../../hooks/repo_skills_config.py" show`
-   (the plugin's SessionStart hook saves the filled-in section to
-   `~/.claude/repo-skills-config.saved.md` at every session start, so it
-   survives a plugin update or a CLAUDE.md that got reset). Exit 1 means
-   there is none. If the current section is missing or still placeholders
+   (the plugin's SessionStart hook copies the filled-in section to
+   `~/.claude/repo-skills-config.saved.md` whenever a fresh session starts
+   and the section has changed, so it survives a plugin update or a
+   CLAUDE.md that got reset). Exit 1 means there is no usable copy. If the current section is missing or still placeholders
    and a saved copy exists, show it and use its values as the defaults
    instead. If both exist and differ, show both and use the current one.
    Saved company-specific values (Slack channel ID, GitHub-only repos, Org
@@ -157,12 +157,18 @@ Only if the user opts into the unattended PR watcher (step 7), also:
    written and wait for the user's OK. Then:
    - file missing → create `~/.claude/CLAUDE.md` with just this section;
    - section present → replace it in place (from the `## repo-* skills`
-     heading up to the next `## ` heading or end of file);
+     heading up to the next `# ` or `## ` heading or end of file);
    - section absent → append it at the end, separated by a blank line.
    Never touch any other part of the file. Show the resulting section
-   (`sed -n '/^## repo-\* skills/,/^## /p' ~/.claude/CLAUDE.md`) as proof.
+   (`sed -n '/^## repo-\* skills/,/^##\{0,1\} /p' ~/.claude/CLAUDE.md`) as proof.
    Then refresh the saved copy right away, not at the next session start:
    `python3 "<this skill's base directory>/../../hooks/repo_skills_config.py" save`.
+   Exit 1 means the written section isn't readable as filled in (or
+   CLAUDE.md couldn't be read as UTF-8): recheck
+   that GitHub org is a real org (not empty or `your-org`) and that neither
+   it nor Local workspace holds a `<…>` placeholder. Exit 2 means the backup
+   copy couldn't be written, so tell the user (CLAUDE.md itself was still
+   written).
 10. **Report** the values written and remind the user that a new Claude Code
    session picks them up (the current one already has the old CLAUDE.md
    loaded).
