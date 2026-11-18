@@ -33,6 +33,7 @@ The skills use placeholders instead of a hard-coded org, repos or branches:
 | `<main-branch>` | `main` | Production branch; the release branch is promoted into it via a PR |
 | `<promotion-repos>` | `api`, `ui` | Repos running the release → main promotion |
 | Git hand-off | `on` | `on`: Claude hands you git commands instead of running them. `off`: Claude runs them itself (see below) |
+| Model routing | `rewrite` | Subagent routing hook: `rewrite` moves a subagent to the model the routing table picks, `deny` makes Claude retry with it, `off` disables it |
 | Slack channel ID | empty | Company-specific channel for automated run summaries; asked per project, never defaulted |
 | Org email | empty | Your address at the company: per-folder git commit email and GitHub email routing; asked per project, never defaulted |
 
@@ -48,6 +49,7 @@ can with `gh`, asks you to confirm each value, and writes them to the
 - Main branch: main
 - Promotion repos: api, ui
 - Git hand-off: on
+- Model routing: rewrite
 - Slack channel ID: C0123456789
 - Org email: you@my-company.com
 ```
@@ -82,6 +84,12 @@ Real values live only in that file, never in this repo.
 | `git-local-excludes` | Put local-only dirs (`.idea`, `.claude`) in `.git/info/exclude`, not `.gitignore` |
 | `ci-test-implementation` | Pytest marker taxonomy (unmarked / integration / long-running), what GitHub Actions may run, local double-run before "CI-ready" |
 
+### Working efficiency
+
+| Skill | What it does |
+|---|---|
+| `model-routing` | Pick the model and effort for a task from a routing table (Haiku for search/logs, Sonnet for scoped coding, Opus by default, Fable for migrations and deep research), then run it as a subagent with a self-contained brief; escalation ladder: verify → raise effort → move up a model |
+
 ### Working rules (applied by default)
 
 | Skill | What it does |
@@ -104,6 +112,19 @@ Real values live only in that file, never in this repo.
 |---|---|
 | [`tools/git-config`](tools/git-config/README.md) | Global git setup, safe to rerun: identity (asked, never built in), optional SSH signing, aliases, and the safety defaults the skills rely on (`branch.autoSetupMerge=false`, `push.autoSetupRemote=true`). `--org-identity <dir> --email <work-email>` makes repos under `<dir>` commit with a company email |
 | [`tools/repo-pr-watcher`](tools/repo-pr-watcher/README.md) | Runs `repo-pr-approve` on a launchd schedule, skipping ticks with no new org review activity (via `gh-notifications`' filter), **fully unattended** — posts approvals/comments with no confirmation. Not part of the plugin; off until you run its `install.sh` |
+
+## Hooks
+
+The plugin ships one hook, active as soon as the plugin is installed:
+
+| Hook | What it does |
+|---|---|
+| `PreToolUse` on `Agent` → [`hooks/route_agent.py`](plugins/personal/hooks/route_agent.py) | Applies the `model-routing` table to every subagent call by keyword. Raises a model you chose but never lowers it, except for search/log/summary work; no rule match = no change. `[model-override]` in the prompt bypasses it. Logs one line per decision to `~/.claude/model-routing.log` (no prompt text). Any error lets the call through unchanged. Python 3.9+, stdlib only |
+
+Turn it off with `- Model routing: off` in the `## repo-* skills` section
+(or `MODEL_ROUTING_MODE=off`, which wins over the file); `deny` blocks
+the call and lets Claude retry with the routed model instead of
+rewriting it. Tests: `python3 -m unittest plugins/personal/hooks/test_route_agent.py`.
 
 ## Ground rules baked into every skill
 

@@ -1,6 +1,6 @@
 ---
 name: init-personal-skills
-description: Set up the repo-* skills for a new project — ask for (and auto-detect via gh) the GitHub org, local workspace folder, release branch, main branch, promotion repos, the git hand-off rule (default on), the company's Slack channel ID, the optional unattended PR watcher, and git safety defaults plus the org email (per-folder commit email), then write them to the `## repo-* skills` section of the user-level ~/.claude/CLAUDE.md after confirmation. Invoke when the user says "/init-personal-skills", "set up the skills for a new project", "switch the repo skills to another org", or when another skill reports placeholder config values.
+description: Set up the repo-* skills for a new project — ask for (and auto-detect via gh) the GitHub org, local workspace folder, release branch, main branch, promotion repos, the git hand-off rule (default on), the subagent model-routing mode (default rewrite), the company's Slack channel ID, the optional unattended PR watcher, and git safety defaults plus the org email (per-folder commit email), then write them to the `## repo-* skills` section of the user-level ~/.claude/CLAUDE.md after confirmation. Invoke when the user says "/init-personal-skills", "set up the skills for a new project", "switch the repo skills to another org", or when another skill reports placeholder config values.
 ---
 
 # Initialize the repo-* skills for a project
@@ -23,6 +23,7 @@ whenever the user moves to a different project.
 - Main branch: <main-branch>
 - Promotion repos: <repo>, <repo>
 - Git hand-off: on
+- Model routing: rewrite
 - Slack channel ID: <channel-id or empty>
 - GitHub-only repos: <repo>, <repo> or empty
 - Org email: <company email or empty>
@@ -46,6 +47,7 @@ Only if the user opts into the unattended PR watcher (step 7), also:
 | Main branch | production branch; `<release-branch>` is promoted into it via a PR | `main` |
 | Promotion repos | repos running the release → main promotion; `repo-pr-approve` lists their open PRs into the main branch. Empty = no promotion sweep (only review requests and PRs you commented on) | detected, see step 4 |
 | Git hand-off | `on`: Claude never commits, pushes, creates branches/PRs or merges — it hands you the commands. `off`: Claude runs them itself, still asking before force-pushes, resets, direct pushes to shared branches and merges (`github-branch-hygiene`, `repo-code-review`, `repo-pr-review`) | `on` |
+| Model routing | the plugin's PreToolUse hook on the Agent tool (`model-routing` skill): `rewrite` changes a subagent's model per the routing table, `deny` makes Claude retry with that model, `off` disables the hook | `rewrite` |
 | Slack channel ID | `tools/repo-pr-watcher` run summary; company-specific | none — always asked, empty allowed (= no summary) |
 | GitHub-only repos | repos where review results go to GitHub only: `repo-pr-approve` and `tools/repo-pr-watcher` send the PR author no Slack DM | empty (= author DMs everywhere) |
 | Org email | per-folder git commit email (step 8), `github-email-routing`; company-specific | none — always asked, empty allowed |
@@ -84,6 +86,10 @@ Only if the user opts into the unattended PR watcher (step 7), also:
    its own) or run them itself (`off`). Explain what `off` still guards
    (force-pushes, resets, direct pushes to the release/main branches and
    merges each need an OK). Keep `on` unless the user clearly chooses `off`.
+   Then ask for **Model routing**: `rewrite` (default — the plugin's hook
+   moves a subagent to the model the routing table picks and tells Claude
+   it did), `deny` (the hook blocks the call and Claude retries with that
+   model) or `off`. Point to `/personal:model-routing` for the table.
 6. **Slack channel ID.** Ask for the Slack channel (or DM) ID that should
    get automated run summaries in *this* company's workspace, e.g.
    `C0123456789`. It is company-specific: never suggest one from memory,

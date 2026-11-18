@@ -20,7 +20,7 @@
   Update later with `/plugin marketplace update vpplatonov-skills`.
 
 ### Set up your project
-- [ ] Run `/personal:init-personal-skills`. It asks for your GitHub org, workspace folder, release branch (default `release`), main branch (default `main`), promotion repos, the git hand-off rule (default `on`) your company's Slack channel ID and org email (both optional), suggests what it can detect with `gh`, and writes them to the `## repo-* skills` section of `~/.claude/CLAUDE.md` after your OK. Rerun it when you switch projects.
+- [ ] Run `/personal:init-personal-skills`. It asks for your GitHub org, workspace folder, release branch (default `release`), main branch (default `main`), promotion repos, the git hand-off rule (default `on`), the subagent model-routing mode (default `rewrite`), your company's Slack channel ID and org email (both optional), suggests what it can detect with `gh`, and writes them to the `## repo-* skills` section of `~/.claude/CLAUDE.md` after your OK. Rerun it when you switch projects.
 
 ### Skills to Know About
 
@@ -32,6 +32,9 @@ PR workflows — invoke by name or just ask:
 - /personal:gh-notifications — "what's new on GitHub": unread notifications for your org, sorted into what needs you vs. noise.
 - /personal:repo-pull — sync every local repo to the release branch (or default branch), stashing dirty trees safely.
 - /personal:init-personal-skills — set up org, workspace, branches and promotion repos for a project.
+
+Working efficiency:
+- /personal:model-routing — "which model for this?": picks model and effort from a routing table and runs the task as a subagent with a short brief. A built-in hook applies the same table to every subagent call (`Model routing: rewrite`; `off` disables it; `[model-override]` in a prompt bypasses it).
 
 Applied automatically, no need to invoke:
 - github-branch-hygiene, git-local-excludes, ci-test-implementation

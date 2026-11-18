@@ -1,0 +1,17 @@
+{
+  "description": "Route Agent (subagent) calls to a model by task type; see skills/model-routing.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/route_agent.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
