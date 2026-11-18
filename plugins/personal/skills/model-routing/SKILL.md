@@ -26,6 +26,9 @@ written brief.
 | Computer use, vision-heavy work | `opus` | `medium` |
 | Major refactor, migration, architecture, leading many subagents | `fable` | `medium` → `high` |
 | Deep research, scientific or quantitative analysis | `fable` | `medium` → `high` |
+| Visual design with no code yet: home or landing page, mockup, wireframe | not a subagent — Claude Design (see below) | — |
+| UI built from an existing design (mockup, Figma, Claude Design handoff): a page or a few components | `sonnet` | `medium` → `high` |
+| New UI in code that needs visual judgment (layout, redesign, screenshot checks), or a design system / app-wide UI rollout | `opus` | `medium` |
 | Unsure | `opus` | `medium` |
 
 Judgment rules from the guide:
@@ -71,6 +74,28 @@ Judgment rules from the guide:
    3. move up one model, starting again at a *lower* effort.
    Past `high`, try the next model up instead of `xhigh`.
 
+## Design work
+
+The guide has no design row; these rows are this repo's extension of its
+"vision-heavy → `opus`" advice. "System design" and "architecture" stay on
+the `fable` row — only UI and visual work routes here.
+
+- **Designing a page or screen from scratch** (home page, landing page,
+  mockup): don't spawn a subagent. Tell the user to make it in Claude
+  Design on claude.ai, a canvas built for page and UI design where they
+  can compare versions and edit directly, then bring the exported
+  HTML or handoff back here.
+- **Building it in code from that design**: route as "UI built from an
+  existing design" (`sonnet`). The brief names the design file or export
+  and says how to check the result (screenshot vs. the design, a
+  responsive breakpoint list). A clear design is a spec, and a spec alone
+  doesn't mean `sonnet`: a design system or a rollout across the whole app
+  goes to `opus`.
+- **No design exists but code is wanted now**: route as "New UI in code"
+  (`opus`), and have it check its own screenshots against the brief.
+- **Searching or reading UI code** (find the component, list the CSS
+  files) is ordinary search: `haiku`.
+
 ## Leading many subagents
 
 Subagents can spawn their own, up to three levels below the main
@@ -109,8 +134,16 @@ exits at once when it sees it, so the classifier can never recurse.
 | Keyword rule | Matches (description + prompt) | Model |
 |---|---|---|
 | `large-change` | migrate, migration, architecture, major refactor, codebase-wide, deep research, quantitative analysis | `fable` |
+| `ui-system` | design system, component library, across all components/pages/screens, the whole/entire app or UI | `opus` |
+| `ui-from-design` | implement the design/mockup, from the mockup/design/Figma/wireframe/handoff, match the design, pixel-perfect | `sonnet` |
 | `scoped-code` | fix a bug, bug fix, implement the spec, write tests | `sonnet` |
+| `ui-visual` | home page, landing page, mockup, wireframe, UI/UX/visual design, redesign the page/UI/screen/…, page or responsive layout | `opus` |
 | `search-read` | `Explore` agents; search, grep, find files, read logs, summarize, run tests, classify, extract — unless the task also edits, fixes, reviews or designs | `haiku` |
+
+The three `ui-*` rules apply only when the task also builds or changes
+something (implement, build, create, add, write, design, lay out, style,
+convert, …) and never to `Explore` agents, so a search through UI code
+still goes to `haiku`.
 
 **Policy**, the same for either classifier:
 - It only changes the call when the classifier picks a different model.

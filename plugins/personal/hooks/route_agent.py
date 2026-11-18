@@ -50,7 +50,7 @@ CHEAP_TYPES = ("search-read", "classification")
 # Rows of the table in classify_prompt.md; anything else is logged as "other".
 TASK_TYPES = ("everyday-engineering", "scoped-code", "classification", "search-read",
               "chat", "docs", "complex-docs", "repeated-agent", "computer-use",
-              "large-change", "deep-research", "unsure")
+              "large-change", "deep-research", "ui-from-design", "ui-visual", "unsure")
 MAX_TIMEOUT = 25.0  # hooks.json allows 30 s; leave room for the fallback
 
 # First match wins. "cheap" rules may lower an explicitly requested model;
@@ -64,12 +64,42 @@ RULES = [
                    r"major refactor|large refactor|codebase-wide|deep research|"
                    r"quantitative analysis|scientific)\b",
     },
+    # The ui-* rules need a build/change word and skip Explore agents (see
+    # BUILDS), so searching UI code still reaches search-read.
+    {
+        "name": "ui-system",
+        "model": "opus",
+        "cheap": False,
+        "builds": True,
+        "pattern": r"\b(design system|component library|(across|for) (all|every) (the |\d+ )?"
+                   r"(components|pages|screens|views)|(whole|entire) (app|site|website|ui|"
+                   r"front-?end))\b",
+    },
+    {
+        "name": "ui-from-design",
+        "model": "sonnet",
+        "cheap": False,
+        "builds": True,
+        "pattern": r"\b(implement (the |this |a )?(design|mock-?up)|from (the |a |this )?"
+                   r"(mock-?up|design|figma|wireframe|handoff)|match(es|ing)? the "
+                   r"(design|mock-?up)|pixel[- ]perfect)\b",
+    },
     {
         "name": "scoped-code",
         "model": "sonnet",
         "cheap": False,
         "pattern": r"\b(fix (the |a |this )?bug|bug ?fix|implement (the |this )?spec|"
                    r"per the spec|add (a )?unit tests?|write (the )?tests?)\b",
+    },
+    {
+        "name": "ui-visual",
+        "model": "opus",
+        "cheap": False,
+        "builds": True,
+        "pattern": r"\b(home ?page|landing page|mock-?ups?|wireframes?|ui design|ux design|"
+                   r"visual design|page layout|responsive layout|redesign(ing)? (the |a |this |"
+                   r"our )?(\w+ )?(page|ui|ux|screen|site|website|layout|dashboard|"
+                   r"component|header|footer|nav\w*)s?)\b",
     },
     {
         "name": "search-read",
@@ -93,6 +123,15 @@ NOT_CHEAP = re.compile(
     r"(change|update|changes|updates|changed|updated|changing|updating) "
     r"(the|it|them|this|that|all))\b",
     re.I)
+
+
+# A "builds" rule only applies when the task also makes or changes something.
+BUILDS = re.compile(
+    r"\b(implement\w*|build\w*|creat\w*|add|adds|added|adding|writ(e|es|ing)|"
+    r"make|makes|making|convert\w*|appl(y|ies|ied|ying)|redesign\w*|lay out|laying out|"
+    r"design (a|an|the|new|our|this)|styl(e|es|ed|ing) (the|a|it|this)|restyl\w*|"
+    r"updat\w*|chang\w*|edit\w*|refactor\w*|rebuild\w*|code|coding|prototyp\w*|"
+    r"roll ?out)\b", re.I)
 
 
 def norm_model(value: object) -> str | None:
@@ -130,6 +169,8 @@ def regex_classify(ti: dict) -> dict | None:
     for rule in RULES:
         hit = stype in rule.get("types", ()) or re.search(rule["pattern"], text, re.I)
         if not hit:
+            continue
+        if rule.get("builds") and (stype == "explore" or not BUILDS.search(text)):
             continue
         if rule["cheap"] and NOT_CHEAP.search(text):
             continue
