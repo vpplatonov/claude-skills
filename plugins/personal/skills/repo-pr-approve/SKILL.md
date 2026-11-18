@@ -1,6 +1,6 @@
 ---
 name: repo-pr-approve
-description: Deep-verify and review open PRs across org repos where you're a requested reviewer (not the author) — checks out each branch, actually runs the test/lint suite, tamper-tests any claimed guardrails, cross-checks PR-body claims against measured reality. A finding in that first pass gets posted as a PR comment and stops there; a clean first pass gets exactly one more independent check, run as a fresh subagent on the model the model-routing classifier picks for that PR, before either approving (clean) or commenting and stopping (finding) — always with your go-ahead before anything posts. Invoke when the user asks to "review the PRs waiting on me", "check what I need to review", "/repo-pr-approve", or similar.
+description: Deep-verify and review open PRs across org repos where you're a requested reviewer (not the author) — checks out each branch, actually runs the test/lint suite, tamper-tests any claimed guardrails, cross-checks PR-body claims against measured reality. A finding in that first pass gets posted as a PR comment and stops there; a clean first pass gets exactly one more independent check, run as a fresh subagent on the model picked by model routing for that PR (or this session's model if routing is off or no rule matches; falls back to opus if that model can't run), before either approving (clean) or commenting and stopping (finding) — always with your go-ahead before anything posts. Invoke when the user asks to "review the PRs waiting on me", "check what I need to review", "/repo-pr-approve", or similar.
 ---
 
 # Reviewing other people's PRs (org repos)
@@ -109,8 +109,9 @@ they never run the review protocol at the same time:
 Step 2 is a dedup/inclusion gate that runs per PR before anything else.
 Steps 3-8 constitute **Round 1**. Step 9 is the two-round decision protocol
 that replaces any free-form verdict choice — see there for how Round 1's
-outcome determines whether a Round 2 pass (a fresh subagent on the classifier's model) happens
-at all.
+outcome determines whether a Round 2 pass (a fresh subagent on the model
+picked by model routing, or this session's model if routing is off or no
+rule matches; opus if that model can't run) happens at all.
 
 1. **Enumerate PRs where review is requested from you, plus PRs where
    you've previously commented, plus every open PR into `<main-branch>` (the
@@ -381,33 +382,63 @@ at all.
    - **Round 1 is clear**: proceed to **Round 2** — exactly one more
      independent pass, always as a fresh `Agent` subagent (never in this
      session's own context, so it doesn't inherit Round 1's reasoning).
-     Its model comes from the model-routing classifier, not from this
-     skill:
+     Its model comes from model routing, not from this skill:
      - **Leave `model` unset and don't put `[model-override]` in the
-       prompt.** The plugin's `PreToolUse` hook (`hooks/route_agent.py`)
-       asks Sonnet to classify the call and sets `model` for you (keyword
-       rules if Sonnet fails). A review is never cheap work, so it can't
-       land on haiku.
+       prompt.** Use `subagent_type: "general-purpose"` (Round 2 runs
+       tests; Explore only reads excerpts). The plugin's `PreToolUse`
+       hook (`hooks/route_agent.py`) asks Sonnet to classify the call and,
+       in `rewrite` mode (the default), sets `model` for you (keyword rules
+       if Sonnet fails or is unsure; their `risky-review` rule keeps a review that
+       names a risk area as a whole word — concurrency, locking,
+       thread-safe, security, authentication, schema, database,
+       performance-critical — on opus; a migration goes to fable via
+       `large-change`. Repo and path names count too, so a repo called
+       `auth-service` raises any review of it — harmless, it only
+       raises). The classifier judges a review by the
+       change it reviews (risky changes → opus, ordinary ones → sonnet),
+       so name the risk area plainly in the prompt. A review is
+       never cheap work, so it can't land on haiku.
+     - **In `deny` mode** (`- Model routing: deny`) the hook blocks the
+       call instead and names a model: retry the same call once with that
+       `model` — still the one Round 2 pass. If it's blocked again, add
+       `[model-override]` and keep the model you set on the first retry
+       (ignore any newly named one).
      - **Make the call classifiable.** `description`: "Independent review
        of PR <owner>/<repo>#<n>". The prompt opens with what the change
-       actually is — areas and kind of change (e.g. "schema migration in
-       the orders service", "copy fix in two templates",
-       "concurrency guard in the inference worker"), size (files, lines),
-       and risk signals Round 1 saw — so the classifier routes on the
-       PR's real difficulty. Then the brief: worktree path, head SHA,
-       the test/lint commands Round 1 ran, and "re-examine the diff at
-       its current head fresh, report findings with evidence; don't
-       edit, commit or post anything". Don't paste Round 1's verdict or
-       conclusions — the point is a genuinely independent second look.
+       actually is — areas and kind of change (e.g. "copy fix in two
+       templates", "concurrency guard in the inference worker"), size
+       (files, lines), and the risk areas the diff touches (not Round 1's
+       judgments) — so the classifier routes on the PR's real difficulty.
+       Name only what the PR does; don't mention kinds of change it
+       doesn't contain ("no migration touched" still trips the keyword
+       fallback's `large-change` rule, "no auth changes" its
+       `risky-review` rule). Then the brief: worktree path,
+       head SHA, the test/lint commands Round 1 ran, and "re-examine the
+       diff at its current head fresh, report findings with evidence;
+       don't edit, commit or post anything". Don't paste Round 1's
+       verdict or conclusions — the point is a genuinely independent
+       second look.
      - **Record the model.** The hook's note ("Model routing: this
-       subagent was sent to X …") says which model ran; with no note,
-       the subagent inherited this session's model. Put it in the report
-       to the user ("second check on Sonnet 5.5"), never in the GitHub
-       or Slack text.
-     - **If the routed model can't run** (e.g. a 429 or "needs usage
-       credits" for Fable), re-spawn once with `model: "opus"` and
-       `[model-override]` in the prompt, and tell the user it fell back.
-       That still counts as the one Round 2 pass, not a third round.
+       subagent was sent to X …") says which model ran; in `deny` mode
+       it's the model you set on the retry; with neither (routing `off`,
+       or no rule matched), the subagent inherited this session's model.
+       Put it in the report to the user ("second check on sonnet"),
+       never in the GitHub or Slack text.
+     - **If the call errors before returning any review** (e.g. a 429, or
+       "needs usage credits" for Fable) and the model wasn't opus,
+       re-spawn once with `model: "opus"` and `[model-override]` in the
+       prompt, and tell the user it fell back. That still counts as the
+       one Round 2 pass — the failed attempt produced no review. If opus
+       itself can't run, stop: report that Round 2 didn't run and don't
+       approve (unattended runs say so in their output). A completed
+       result is never re-run on another model (an error is not a
+       result: the hook note's "don't retry on another model" covers
+       completed results only). A routing block in
+       `deny` mode is not such an error; handle it per the `deny` bullet.
+     - **A Round 2 that couldn't verify is not clear.** If it couldn't
+       run the suite or examine the diff (worktree missing, tests won't
+       start), report that to the user and don't approve and don't
+       re-run — unattended runs post nothing for that PR.
      - **Round 2 is also clear**: post the formal approval
        (`gh pr review <n> --approve --body-file`, confirmed with the user
        first).
@@ -540,10 +571,11 @@ nothing — hand the finding back immediately rather than spending another
 full pass to double-confirm a bug that's already confirmed. If Round 1
 came back clean, exactly one more independent pass — a fresh subagent with
 no Round 1 context — is the one check worth paying for before an approval
-goes out under your name. Its model is picked per PR by the model-routing
-classifier (changed 2026-11-18; it used to be forced onto Opus 5.5): a
-two-file copy fix doesn't need Opus, while a migration or concurrency
-change gets Opus or stronger, so the cost tracks the PR's real difficulty.
+goes out under your name. Its model is picked per PR by model routing
+(changed 2026-11-18; it used to be forced onto Opus 5.5): a two-file copy
+fix doesn't need Opus, while a migration or concurrency change is
+typically routed to Opus or stronger (classifier rules 3 and 11); routine reviews
+often land on Sonnet. The cost tracks the PR's real difficulty.
 Independence comes from the fresh context, not from a fixed model.
 Confirmed with the user (2026-08-20): no third round either way, and a
 Round 2 finding never gets auto-approved or bounced back to fix anything —
