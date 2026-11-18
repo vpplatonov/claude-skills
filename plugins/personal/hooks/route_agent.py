@@ -4,9 +4,14 @@
 Reads the hook input on stdin and classifies the subagent task: first with
 Sonnet (``claude -p --model sonnet``, prompt in ``classify_prompt.md``),
 then, on timeout, error, bad JSON or low confidence, with the keyword rules
-below. When the result picks a different model than the one requested it
-either rewrites the call (``rewrite``) or denies it with a "retry with
-model X" reason (``deny``). ``MODEL_ROUTING_CLASSIFIER=regex`` skips Sonnet. Mode comes from ``MODEL_ROUTING_MODE``
+below. ``MODEL_ROUTING_CLASSIFIER=regex`` skips Sonnet.
+
+Policy: raise-only (fill in a missing model, raise a weaker one), except
+that haiku may replace a stronger model for cheap, read-only work; haiku
+is never picked for anything else. ``rewrite`` changes ``model`` in place;
+``deny`` blocks only raises, with a "retry with model X" reason (a lowering
+passes unchanged, so retries can't oscillate). Mode comes from
+``MODEL_ROUTING_MODE``
 or ``- Model routing: <mode>`` in the ``## repo-* skills`` section of
 ``~/.claude/CLAUDE.md``; default ``rewrite``. ``off`` disables it.
 
@@ -16,9 +21,11 @@ the tool call always goes ahead unchanged.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -40,6 +47,11 @@ PROMPT_CHARS = 4000
 DEFAULT_TIMEOUT = 20.0
 # Task types the classifier may use to lower an explicitly requested model.
 CHEAP_TYPES = ("search-read", "classification")
+# Rows of the table in classify_prompt.md; anything else is logged as "other".
+TASK_TYPES = ("everyday-engineering", "scoped-code", "classification", "search-read",
+              "chat", "docs", "complex-docs", "repeated-agent", "computer-use",
+              "large-change", "deep-research", "unsure")
+MAX_TIMEOUT = 25.0  # hooks.json allows 30 s; leave room for the fallback
 
 # First match wins. "cheap" rules may lower an explicitly requested model;
 # every other rule only raises it (or fills it in when none was given).
@@ -70,10 +82,17 @@ RULES = [
                    r"tag(ging)?|extract)\b",
     },
 ]
-# A cheap rule never applies when the task also edits code or needs judgment.
+# A cheap rule never applies when the task also edits, publishes or needs
+# judgment. Deliberately broad: a false hit only costs a stronger model.
 NOT_CHEAP = re.compile(
-    r"\b(fix|edit|modify|implement|refactor|write (the )?code|change the code|"
-    r"review|decide|design|debug|patch|update the code)\b", re.I)
+    r"\b(fix\w*|edit\w*|modif\w*|implement\w*|refactor\w*|patch\w*|debug\w*|"
+    r"review\w*|decid\w*|design\w*|delet\w*|remov\w*|renam\w*|creat\w*|"
+    r"add|adds|added|adding|(re|over)?writ(e|es|ing|ten)|(re|over)?wrote|"
+    r"commit\w*|push\w*|merg\w*|mov(e|es|ed|ing)|install\w*|deploy\w*|"
+    r"post|posts|posted|posting|appl(y|ies|ied|ying)|replac\w*|"
+    r"(change|update|changes|updates|changed|updated|changing|updating) "
+    r"(the|it|them|this|that|all))\b",
+    re.I)
 
 
 def norm_model(value: object) -> str | None:
@@ -120,9 +139,12 @@ def regex_classify(ti: dict) -> dict | None:
 
 def classifier_timeout() -> float:
     try:
-        return float(os.environ.get("MODEL_ROUTING_CLASSIFIER_TIMEOUT") or DEFAULT_TIMEOUT)
+        t = float(os.environ.get("MODEL_ROUTING_CLASSIFIER_TIMEOUT") or DEFAULT_TIMEOUT)
     except ValueError:
         return DEFAULT_TIMEOUT
+    if not math.isfinite(t):
+        return DEFAULT_TIMEOUT
+    return min(max(t, 0.1), MAX_TIMEOUT)
 
 
 def parse_verdict(raw: str) -> dict | None:
@@ -140,19 +162,18 @@ def parse_verdict(raw: str) -> dict | None:
         return None
     if not isinstance(v, dict):
         return None
-    model = norm_model(v.get("model"))
+    model = str(v.get("model") or "").strip().lower()
     effort = str(v.get("effort") or "medium").lower()
     conf = v.get("confidence")
-    if model is None or effort not in EFFORTS or isinstance(conf, bool) \
+    if model not in TIER or effort not in EFFORTS or isinstance(conf, bool) \
             or not isinstance(conf, (int, float)) or not 0 <= conf <= 1:
         return None
     return {
-        "task_type": str(v.get("task_type") or "unknown")[:40],
+        "task_type": v["task_type"] if v.get("task_type") in TASK_TYPES else "other",
         "model": model,
         "effort": effort,
         "read_only": v.get("read_only") is True,
         "confidence": float(conf),
-        "why": str(v.get("why") or "")[:200],
     }
 
 
@@ -179,17 +200,26 @@ def llm_classify(ti: dict) -> tuple[dict | None, str]:
            "--setting-sources", "", "--no-session-persistence",
            "--system-prompt", system]
     try:
-        p = subprocess.run(cmd, input=task, env=env, cwd=tempfile.gettempdir(),
-                           capture_output=True, text=True,
-                           timeout=classifier_timeout())
-    except subprocess.TimeoutExpired:
-        return None, "timeout"
+        # Own process group, so a timeout also kills whatever `claude` spawned
+        # (it may be a shell or npm shim around node).
+        p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                             stderr=subprocess.DEVNULL, env=env, text=True,
+                             cwd=tempfile.gettempdir(), start_new_session=True)
     except OSError:
         return None, "exec-error"
+    try:
+        stdout, _ = p.communicate(task, timeout=classifier_timeout())
+    except Exception as exc:  # timeout, undecodable output, ...: kill and fall back
+        try:
+            os.killpg(p.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        p.wait()
+        return None, "timeout" if isinstance(exc, subprocess.TimeoutExpired) else "io-error"
     if p.returncode != 0:
         return None, "exit-{}".format(p.returncode)
     try:
-        envelope = json.loads(p.stdout)
+        envelope = json.loads(stdout)
     except ValueError:
         return None, "bad-envelope"
     if not isinstance(envelope, dict) or envelope.get("is_error"):
@@ -224,13 +254,19 @@ def decide(ti: dict, info: dict | None = None) -> tuple[str | None, str]:
         if verdict is not None:
             info.update(classifier="sonnet", effort=verdict["effort"],
                         confidence=verdict["confidence"], task_type=verdict["task_type"])
-            info["classifier_why"] = verdict["why"]
             want, name = verdict["model"], "sonnet:" + verdict["task_type"]
             # Lowering a chosen model is allowed only for cheap, read-only
             # work, double-checked by the keyword guard.
             cheap = (want == "haiku" and verdict["read_only"]
                      and verdict["task_type"] in CHEAP_TYPES
                      and not NOT_CHEAP.search(task_text(ti)))
+            if want == "haiku" and not cheap:
+                # Self-contradictory verdict (haiku for non-cheap work): treat
+                # it as unusable, so the keyword rules can still raise.
+                for key in ("effort", "confidence", "task_type"):
+                    info.pop(key, None)
+                info["classifier_status"] = "haiku-not-cheap"
+                want = name = None
     if want is None:
         info["classifier"] = "regex"
         rule = regex_classify(ti)
@@ -240,6 +276,10 @@ def decide(ti: dict, info: dict | None = None) -> tuple[str | None, str]:
     have = norm_model(ti.get("model"))
     if have == want:
         return None, "already:" + name
+    # Haiku only ever for cheap work, also when no model was requested (the
+    # subagent would otherwise inherit the parent's, usually stronger, model).
+    if want == "haiku" and not cheap:
+        return None, "not-cheap:" + name
     if have is not None and TIER[want] < TIER[have] and not cheap:
         return None, "keep-explicit:" + name
     return want, name
@@ -267,7 +307,13 @@ def main() -> None:
         return
     info: dict = {}
     target, why = decide(ti, info)
-    note = info.pop("classifier_why", "")
+    have = norm_model(ti.get("model"))
+    lowers = target is not None and (
+        TIER[target] < TIER[have] if have is not None else target == "haiku")
+    if mode == "deny" and lowers:
+        # A retry is classified again and, with a non-deterministic or flaky
+        # classifier, could flip back up: deny mode only ever denies raises.
+        target, why = None, "deny-no-lower:" + why
     log({
         "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "mode": mode,
@@ -298,11 +344,10 @@ def main() -> None:
             "permissionDecisionReason": "Model routing: {} -> {}".format(why, target),
             "updatedInput": new,
             "additionalContext": (
-                "Model routing: this subagent was sent to {} instead of {} (rule: {}{}). "
+                "Model routing: this subagent was sent to {} instead of {} (rule: {}). "
                 "Its result is valid; don't retry on another model. To force a model, "
                 "put [model-override] in the prompt.".format(
-                    target, ti.get("model") or "the default", why,
-                    "; " + note if note else "")),
+                    target, ti.get("model") or "the default", why)),
         }}
     sys.stdout.write(json.dumps(out))
 

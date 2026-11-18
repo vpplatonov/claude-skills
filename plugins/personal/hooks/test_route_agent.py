@@ -9,11 +9,13 @@ hermetic, no network).
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import subprocess
 import sys
 import textwrap
+import time
 from pathlib import Path
 
 import pytest
@@ -22,11 +24,16 @@ SCRIPT = Path(__file__).resolve().parent / "route_agent.py"
 
 FAKE_CLAUDE = textwrap.dedent("""\
     #!{python}
-    import json, os, sys, time
+    import json, os, subprocess, sys, time
     open(os.environ["FAKE_CALLS"], "a").write(sys.stdin.read() + "\\n")
+    if os.environ.get("FAKE_GRANDCHILD"):  # like an npm shim around node
+        child = subprocess.Popen(["sleep", "30"])
+        open(os.environ["FAKE_GRANDCHILD"], "w").write(str(child.pid))
     if os.environ.get("FAKE_SLEEP"):
         time.sleep(float(os.environ["FAKE_SLEEP"]))
-    if os.environ.get("FAKE_RAW"):
+    if os.environ.get("FAKE_BYTES"):
+        sys.stdout.buffer.write(bytes.fromhex(os.environ["FAKE_BYTES"]))
+    elif os.environ.get("FAKE_RAW"):
         sys.stdout.write(os.environ["FAKE_RAW"])
     else:
         sys.stdout.write(json.dumps({{"type": "result", "is_error": False,
@@ -44,9 +51,12 @@ def agent(prompt: str, model: str | None = None, stype: str = "general-purpose",
 
 
 def verdict(model: str, task_type: str = "scoped-code", conf: float = 0.9,
-            read_only: bool = False, effort: str = "medium") -> str:
+            read_only: bool = False, effort: str = "medium", why: str = "test") -> str:
     return json.dumps({"task_type": task_type, "model": model, "effort": effort,
-                       "read_only": read_only, "confidence": conf, "why": "test"})
+                       "read_only": read_only, "confidence": conf, "why": why})
+
+
+CHEAP_VERDICT = verdict("haiku", "search-read", read_only=True)
 
 
 def routed(out: dict | None) -> str | None:
@@ -145,11 +155,16 @@ def test_regex_routing(hook: Hook, prompt: str, model: str | None,
 
 
 def test_deny_mode(hook: Hook) -> None:
-    _, out = hook(agent("grep for TODOs", "opus"), mode="deny")
+    _, out = hook(agent("Plan the database migration", "opus"), mode="deny")
     hso = out["hookSpecificOutput"]
     assert hso["permissionDecision"] == "deny"
-    assert 'model: "haiku"' in hso["permissionDecisionReason"]
+    assert 'model: "fable"' in hso["permissionDecisionReason"]
     assert "updatedInput" not in hso
+
+
+def test_deny_mode_never_denies_a_lowering(hook: Hook) -> None:
+    assert hook(agent("grep for TODOs", "opus"), mode="deny")[1] is None
+    assert hook.last_log()["why"] == "deny-no-lower:search-read"
 
 
 def test_off_mode_from_env(hook: Hook) -> None:
@@ -163,7 +178,7 @@ def test_mode_from_claude_md(hook: Hook) -> None:
 
 def test_env_beats_claude_md(hook: Hook) -> None:
     md = "## repo-* skills\n- Model routing: off\n"
-    _, out = hook(agent("grep for TODOs", "opus"), mode="deny", claude_md=md)
+    _, out = hook(agent("Plan the database migration", "opus"), mode="deny", claude_md=md)
     assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
@@ -224,6 +239,7 @@ def test_invalid_json_falls_back_to_regex(sonnet: Hook) -> None:
 @pytest.mark.parametrize("bad", [
     verdict("gpt-4"), verdict("opus", effort="max"), verdict("opus", conf=1.5),
     '{"model": "opus"}', "[]",
+    verdict("sonnet, not haiku"),  # only an exact tier name counts
 ])
 def test_bad_fields_fall_back(sonnet: Hook, bad: str) -> None:
     _, out = sonnet(agent("Fix the bug in date parsing"), FAKE_RESULT=bad)
@@ -268,6 +284,9 @@ def test_recursion_guard_outputs_nothing(sonnet: Hook) -> None:
 
 
 @pytest.mark.parametrize("result, prompt, model, expected", [
+    # No model requested: haiku still needs the cheap checks.
+    (verdict("haiku", "everyday-engineering"), "Fix the race in worker.py", None, None),
+    (CHEAP_VERDICT, "Read the CI logs and list failures", None, "haiku"),
     # Edit work is never lowered from an explicit model.
     (verdict("sonnet", "scoped-code"), "Fix the off-by-one in pager.py", "opus", None),
     # Haiku lowering needs read_only ...
@@ -281,6 +300,8 @@ def test_recursion_guard_outputs_nothing(sonnet: Hook) -> None:
      "Find the parser and fix the crash", "opus", None),
     (verdict("haiku", "search-read", read_only=True),
      "Read the CI logs and list failures", "opus", "haiku"),
+    (verdict("haiku", "classification", read_only=True),
+     "Tag each log line by severity", "opus", "haiku"),
     (verdict("opus", "everyday-engineering"), "Debug why checkout hangs", "haiku", "opus"),
 ])
 def test_sonnet_policy(sonnet: Hook, result: str, prompt: str, model: str,
@@ -299,3 +320,124 @@ def test_deny_mode_uses_sonnet_verdict(sonnet: Hook) -> None:
     _, out = sonnet(agent("Move to the new ORM", "opus"), mode="deny",
                     FAKE_RESULT=verdict("fable", "large-change"))
     assert 'model: "fable"' in out["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+@pytest.mark.parametrize("prompt", [
+    "Find all TODO comments and delete them",
+    "Grep for the old name and rename it everywhere",
+    "Search the config and add the missing key",
+    "List the stale branches, then commit and push",
+    "Find the test that fixes the bug",
+    "Locate the parser before fixing it",
+    "Find the docs and update them",
+    "Scan the files and post a summary to the PR",
+    "Read the CI logs and rewrite the summary file",
+    "List files that updated the config and overwrite them",
+    "Find the stale branches and merge them",
+    "Locate the fixtures and move them to tests/",
+    "Find the build output and deploy it",
+])
+def test_edit_wording_blocks_haiku(sonnet: Hook, prompt: str) -> None:
+    _, out = sonnet(agent(prompt, "opus"), FAKE_RESULT=CHEAP_VERDICT)
+    assert out is None
+
+
+def test_edit_after_truncation_still_blocks_haiku(sonnet: Hook) -> None:
+    prompt = "Read the CI logs. " + "x " * 3000 + "Then delete the old logs."
+    _, out = sonnet(agent(prompt, "opus"), FAKE_RESULT=CHEAP_VERDICT)
+    assert out is None
+
+
+def test_deny_mode_never_denies_a_sonnet_lowering(sonnet: Hook) -> None:
+    _, out = sonnet(agent("Read the CI logs and list failures", "opus"), mode="deny",
+                    FAKE_RESULT=CHEAP_VERDICT)
+    assert out is None
+    assert sonnet.last_log()["why"] == "deny-no-lower:sonnet:search-read"
+
+
+def test_unknown_task_type_logged_as_other(sonnet: Hook) -> None:
+    _, out = sonnet(agent("Move to the new ORM", "opus"),
+                    FAKE_RESULT=verdict("fable", "SECRET-TOKEN-123 echoed"))
+    assert routed(out) == "fable"
+    line = sonnet.last_log()
+    assert line["task_type"] == "other"
+    assert "SECRET-TOKEN-123" not in json.dumps(line)
+
+
+def test_classifier_why_not_relayed(sonnet: Hook) -> None:
+    _, out = sonnet(agent("Move to the new ORM", "opus"),
+                    FAKE_RESULT=verdict("fable", "large-change", why="INJECTED-TEXT"))
+    assert "INJECTED-TEXT" not in json.dumps(out)
+    assert "INJECTED-TEXT" not in json.dumps(sonnet.last_log())
+
+
+def test_timeout_kills_the_whole_process_group(sonnet: Hook, tmp_path: Path) -> None:
+    pidfile = tmp_path / "grandchild.pid"
+    _, out = sonnet(agent("Fix the bug in date parsing"), FAKE_GRANDCHILD=str(pidfile),
+                    FAKE_SLEEP="10", MODEL_ROUTING_CLASSIFIER_TIMEOUT="1")
+    assert routed(out) == "sonnet"
+    pid = int(pidfile.read_text())
+    deadline = time.monotonic() + 5  # give the orphan time to be reaped
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return
+        time.sleep(0.1)
+    pytest.fail("grandchild {} still alive after timeout".format(pid))
+
+
+@pytest.fixture
+def route_agent():
+    spec = importlib.util.spec_from_file_location("route_agent", SCRIPT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+@pytest.mark.parametrize("value, expected", [
+    (None, 20.0), ("5", 5.0), ("300", 25.0), ("-1", 0.1), ("abc", 20.0),
+    ("nan", 20.0), ("inf", 20.0),
+])
+def test_classifier_timeout_is_clamped(route_agent, monkeypatch, value, expected) -> None:
+    if value is None:
+        monkeypatch.delenv("MODEL_ROUTING_CLASSIFIER_TIMEOUT", raising=False)
+    else:
+        monkeypatch.setenv("MODEL_ROUTING_CLASSIFIER_TIMEOUT", value)
+    assert route_agent.classifier_timeout() == expected
+
+
+@pytest.mark.parametrize("prompt", [
+    "find where the email address is parsed",
+    "grep the Postgres config",
+    "search for additional logging",
+    "list the files in the postcode module",
+    "find the file that defines the writer class",
+])
+def test_edit_guard_matches_whole_words_only(hook: Hook, prompt: str) -> None:
+    _, out = hook(agent(prompt, "opus"))
+    assert routed(out) == "haiku"
+
+
+def test_undecodable_output_falls_back(sonnet: Hook) -> None:
+    _, out = sonnet(agent("Fix the bug in date parsing"), FAKE_BYTES="fffe0081")
+    assert routed(out) == "sonnet"
+    assert sonnet.last_log()["classifier_status"] == "io-error"
+
+
+def test_deny_mode_no_model_haiku_not_denied(sonnet: Hook) -> None:
+    _, out = sonnet(agent("Read the CI logs and list failures"), mode="deny",
+                    FAKE_RESULT=CHEAP_VERDICT)
+    assert out is None
+    assert sonnet.last_log()["why"] == "deny-no-lower:sonnet:search-read"
+
+
+@pytest.mark.parametrize("model, expected", [("haiku", "sonnet"), (None, "sonnet")])
+def test_contradictory_haiku_verdict_lets_regex_raise(sonnet: Hook, model: str | None,
+                                                      expected: str) -> None:
+    _, out = sonnet(agent("Search for the parser and fix the bug in parsing", model),
+                    FAKE_RESULT=verdict("haiku", "scoped-code", read_only=False))
+    assert routed(out) == expected
+    line = sonnet.last_log()
+    assert (line["classifier"], line["classifier_status"]) == ("regex", "haiku-not-cheap")
+    assert "task_type" not in line
