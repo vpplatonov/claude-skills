@@ -8,7 +8,7 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/route_agent.py\"",
-            "timeout": 10
+            "timeout": 30
           }
         ]
       }
