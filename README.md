@@ -17,8 +17,11 @@ In Claude Code:
 ```
 
 Pull updates later with `/plugin marketplace update vpplatonov-skills`.
-The next session after an update suggests rerunning
-`/personal:init-personal-skills`, with your saved config as the defaults.
+The next fresh `claude` launch (not `--resume` or `/clear`) after an update suggests rerunning
+`/personal:init-personal-skills`, with your saved config as the defaults
+(starting with the update after the one that adds this hook; that first
+launch only records the plugin and saves your config, or suggests setup
+once if it isn't filled in yet).
 
 Skills are namespaced, e.g. `/personal:repo-pr-review`. Claude also picks
 them up automatically from natural requests ("check my PRs").
@@ -121,10 +124,11 @@ The plugin ships two hooks, active as soon as the plugin is installed:
 
 | Hook | What it does |
 |---|---|
-| `SessionStart` (startup) → [`hooks/repo_skills_config.py`](plugins/personal/hooks/repo_skills_config.py) | Saves a filled-in `## repo-* skills` section of `~/.claude/CLAUDE.md` to `~/.claude/repo-skills-config.saved.md`, and fingerprints the installed plugin. After a plugin update (new fingerprint), or when the section is missing/placeholders but a saved copy exists, it tells you to run `/personal:init-personal-skills`, which offers the saved values as defaults. Never edits CLAUDE.md itself. Python 3.9+, stdlib only |
+| `SessionStart` (startup) → [`hooks/repo_skills_config.py`](plugins/personal/hooks/repo_skills_config.py) | On each fresh launch (`startup`; not `--resume`, `/clear` or compact), copies a filled-in `## repo-* skills` section of `~/.claude/CLAUDE.md` to `~/.claude/repo-skills-config.saved.md` (only when it changed), and fingerprints the installed plugin's files (dotfiles such as Claude Code's `.in_use/` markers excluded). Once after a plugin update (new fingerprint), once on a first run with no config, and on every fresh launch while the section is missing/placeholders but a saved copy exists, it tells you to run `/personal:init-personal-skills`, which offers the saved values as defaults. Never edits CLAUDE.md itself. Python 3.9+, stdlib only |
 | `PreToolUse` on `Agent` → [`hooks/route_agent.py`](plugins/personal/hooks/route_agent.py) | Applies the `model-routing` table to every subagent call. Sonnet classifies the task (`claude -p --model sonnet`, prompt in [`hooks/classify_prompt.md`](plugins/personal/hooks/classify_prompt.md), about 5 s per call; times out after 20 s by default, at most 25 s); on timeout, error, bad JSON or confidence below 0.6 it falls back to keyword rules. Raises a model you chose but never lowers it, except to haiku for read-only search/log/summary/classification work (not in `deny` mode, which only denies raises); no rule match = no change. `[model-override]` in the prompt bypasses it. Logs one line per decision to `~/.claude/model-routing.log` (no prompt text). Any error lets the call through unchanged. Python 3.9+, stdlib only |
 
-Turn it off with `- Model routing: off` in the `## repo-* skills` section
+There is no switch for the SessionStart hook; it only reads CLAUDE.md and writes the two `~/.claude/repo-skills-config.*` files. If you remove the section on purpose, delete `~/.claude/repo-skills-config.saved.md` to stop the reminder. The update notice shows once per plugin update whether or not you use the repo-* skills; with a live dev checkout (`--plugin-dir`), any file edit there counts as an update.
+Turn model routing off with `- Model routing: off` in the `## repo-* skills` section
 (or `MODEL_ROUTING_MODE=off`, which wins over the file); `deny` blocks
 the call and lets Claude retry with the routed model instead of
 rewriting it. `MODEL_ROUTING_CLASSIFIER=regex` skips the Sonnet call and
