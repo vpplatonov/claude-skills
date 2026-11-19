@@ -59,7 +59,9 @@ def read(path: str) -> str | None:
 def write(path: str, text: str) -> None:
     tmp = f"{path}.{os.getpid()}.tmp"  # unique: two sessions may start at once
     try:
-        with open(tmp, "w", encoding="utf-8") as fh:
+        # 0600: the section can hold an org email and Slack channel ID
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with open(fd, "w", encoding="utf-8") as fh:
             fh.write(text)
         os.replace(tmp, path)
     finally:
