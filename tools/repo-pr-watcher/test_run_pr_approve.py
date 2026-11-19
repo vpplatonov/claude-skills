@@ -127,3 +127,23 @@ def test_section_read_through_utf8_bom(tmp_path, monkeypatch):
     path.write_bytes(b"\xef\xbb\xbf## repo-* skills\n- GitHub org: acme\n")
     monkeypatch.setattr(watcher, "CLAUDE_MD", path)
     assert watcher.read_section().get("GitHub org") == "acme"
+
+
+def test_non_utf8_claude_md_is_treated_as_missing(tmp_path, monkeypatch):
+    path = tmp_path / "CLAUDE.md"
+    path.write_bytes(b"## repo-* skills\n- GitHub org: caf\xe9\n")
+    monkeypatch.setattr(watcher, "CLAUDE_MD", path)
+    assert watcher.read_section() == {}
+
+
+def test_unreadable_claude_md_is_treated_as_missing(tmp_path, monkeypatch):
+    monkeypatch.setattr(watcher, "CLAUDE_MD", tmp_path)  # a directory: read fails
+    assert watcher.read_section() == {}
+
+
+def test_trailing_html_comment_is_not_a_placeholder(tmp_path, monkeypatch):
+    path = tmp_path / "CLAUDE.md"
+    path.write_text("## repo-* skills\n- Local workspace: ~/workspace/acme/ <!-- main laptop -->\n")
+    monkeypatch.setattr(watcher, "CLAUDE_MD", path)
+    monkeypatch.delenv("REPO_WATCHER_WORKSPACE", raising=False)
+    assert watcher.load_config()["Local workspace"] == "~/workspace/acme/"

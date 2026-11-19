@@ -83,6 +83,12 @@ def test_saves_configured_section_and_stays_quiet(env):
     assert hook(env) is None  # unchanged plugin: still quiet
 
 
+def test_saved_copy_is_private(env):
+    set_claude_md(env, REAL)
+    assert hook(env) is None
+    mode = (claude_dir(env) / "repo-skills-config.saved.md").stat().st_mode & 0o777
+    assert mode == 0o600
+
 def test_template_is_not_saved_and_first_run_suggests_init(env):
     set_claude_md(env, TEMPLATE)
     out = hook(env)

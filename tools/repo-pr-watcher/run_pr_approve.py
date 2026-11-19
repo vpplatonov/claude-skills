@@ -58,14 +58,14 @@ def read_section() -> dict[str, str]:
     """Key/value lines of the `## repo-* skills` section, or {} if absent."""
     try:
         text = CLAUDE_MD.read_text(encoding="utf-8-sig")  # -sig: tolerate a BOM
-    except FileNotFoundError:
+    except (OSError, ValueError):  # unreadable or not valid UTF-8: treat as missing
         return {}
     # Same boundary as the plugin hooks and the init skill: next # or ## heading.
     m = re.search(r"^## repo-\* skills[ \t]*$(.*?)(?=^#{1,2} |\Z)", text, re.M | re.S)
     if not m:
         return {}
     return {
-        kv[1].strip(): kv[2].strip()
+        kv[1].strip(): re.sub(r"<!--.*?-->", "", kv[2]).strip()  # like the plugin hook
         for line in m[1].splitlines()
         if (kv := re.match(r"\s*-\s*([^:]+):\s*(.*)$", line))
     }
